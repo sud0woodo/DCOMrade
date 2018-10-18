@@ -168,12 +168,16 @@ function Get-DefaultPermissions {
     Return $DefaultPermissions
 }
 
+# Function to retrieve the CLSIDs for DCOM applications without LaunchPermissions set
 function Get-CLSID($DefaultLaunchPermission) {
     Invoke-Command -Session $remotesession -ScriptBlock {
+        # Define variable to store the results
         $DCOMCLSIDs = @()
+        # Extract all the AppIDs from the list with the default LaunchPermissions
         $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
             $_.Matches.Value
-        } 
+        }
+        # Loop through the registry and check which AppID with default LaunchPermissions corresponds with which CLSID 
         (Get-ChildItem -Path HKCR:\CLSID\ ).Name.Replace("HKEY_CLASSES_ROOT\CLSID\","") | ForEach-Object {
             if ($DCOMAppIDs -eq (Get-ItemProperty -Path HKCR:\CLSID\$_).'AppID') {
                 $DCOMCLSIDs += "Name: " + (Get-ItemProperty -Path HKCR:\CLSID\$_).'(default)' + "`nCLSID: $_`n"
@@ -181,6 +185,7 @@ function Get-CLSID($DefaultLaunchPermission) {
         }
     } 
 
+    # Write the output to a file
     Try {
         Out-File -FilePath .\$CLSIDFile -InputObject $DCOMCLSIDs -Encoding ascii -ErrorAction Stop
     } Catch [System.IO.IOException] {
