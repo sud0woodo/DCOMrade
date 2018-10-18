@@ -56,11 +56,6 @@ param(
     [Boolean]$interactive
     )
 
-# Define filenames to write to
-$DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
-$LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
-$CLSIDFile = "DCOM_CLSID_$computername.txt"
-
 # Create a new non-interactive Remote Powershell Session
 function Get-NonInteractiveSession {
     Try {
@@ -91,13 +86,9 @@ function Get-InteractiveSession {
 }
 
 # Check if the RPC firewall rule is present, returns True if it accepts external connections, False if the rule is not present
-function Get-RPCRule {
+function Get-RPCRule($remotesession) {
     Write-Host "[i] Checking if $computername allows External RPC connections..." -ForegroundColor Yellow
-    $CheckRPCRule = Invoke-Command -Session $remotesession {
-        Get-ItemProperty -Path Registry::HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules | ForEach-Object {
-            $_ -Match 'v2.10\|Action=Allow\|Active=TRUE\|Dir=In\|Protocol=6\|LPort=RPC'
-        }
-    }
+    $CheckRPCRule = Invoke-Command -Session $remotesession {Get-ItemProperty -Path Registry::HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules | ForEach-Object {$_ -Match 'v2.10\|Action=Allow\|Active=TRUE\|Dir=In\|Protocol=6\|LPort=RPC'}}
 
     if ($CheckRPCRule -eq $True) {
         Write-Host "[+] $computername allows external RPC connections!" -ForegroundColor Green
@@ -116,89 +107,40 @@ function Get-RPCRule {
 }
 
 # Check the DCOM applications on the target system and write these to a textfile
-function Get-DCOMApplications {
+function Get-DCOMApplication($remotesession) {
     Write-Host "[i] Retrieving DCOM applications." -ForegroundColor Yellow
-
-    $DCOMApplications = Invoke-Command -Session $remotesession -ScriptBlock {
-        Get-CimInstance Win32_DCOMapplication
-    }
-
+    $DCOMApplications = Invoke-Command -Session $remotesession -ScriptBlock {Get-CimInstance Win32_DCOMapplication}
     Try {
-        Out-File -FilePath .\$DCOMApplicationsFile -InputObject $DCOMApplications -Encoding ascii -ErrorAction Stop
+        Out-File -FilePath .\DCOM_Applications_$computername.txt -InputObject $DCOMApplications -Encoding ascii -ErrorAction Stop
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
         Write-Host "[!] Exiting..."
         Break
     }
-    Write-Host "[+] DCOM applications retrieved and written to $DCOMApplicationsFile." -ForegroundColor Green
-    Return $DCOMApplications  
+    Write-Host "[+] DCOM applications retrieved and written to file." -ForegroundColor Green  
 }
 
 # Function that checks for the default permissions parameter in the registry and cross references this with the available DCOM Applications on the system
-function Get-DefaultPermissions {
-    # Map the path to HKEY_CLASSES_ROOT
-    Invoke-Command -Session $remotesession -ScriptBlock {
-        New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT
-    } | Out-Null
+function Get-Vulnerable($remotesession) {
+    Invoke-Command -Session $remotesession -ScriptBlock {New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT} | Out-Null
 
-    # Loop through the registry and check every key for the LaunchPermission property, we're only interested in the keys without this property
-    Invoke-Command -Session $remotesession -ScriptBlock {
-        Get-ChildItem -Path HKCR:\AppID\ | ForEach-Object {
-            if(-Not($_.Property -Match "LaunchPermission")) {
-                $_.Name.Replace("HKEY_CLASSES_ROOT\AppID\","")
-            }
-        } 
-    } -OutVariable DefaultPermissionsAppID | Out-Null 
+    Invoke-Command -Session $remotesession -ScriptBlock {Get-ChildItem -Path HKCR:\AppID\ | ForEach-Object { if (-Not ($_.Property -Match "LaunchPermission")) { Write-Host $($_.Name.Replace("HKEY_CLASSES_ROOT\AppID\",""))}}} -OutVariable DefaultPermissionsAppID | Out-Null 
 
-    # Store the DCOM applications present on the target machine in a variable
-    $DCOMApplications = Get-DCOMApplications($remotesession)
-    # Check which DCOM applications have the default permissions set
-    $DefaultPermissions = $DCOMApplications | Select-String -Pattern $DefaultPermissionsAppID
-    Write-Host "[+] Found $($DefaultPermissions.Count) DCOM applications without 'LaunchPermission' subkey!" -ForegroundColor Green
+    $DCOMApplications = Invoke-Command -Session $remotesession -ScriptBlock {Get-CimInstance Win32_DCOMapplication}
+    $PossibleVulnerable = $DCOMApplications | Select-String -Pattern $DefaultPermissionsAppID
+    Write-Host "[+] Found $($PossibleVulnerable.Count) DCOM applications with default launch permissions:" -ForegroundColor Green
 
-    Try {
-        Out-File -FilePath .\$LaunchPermissionFile -InputObject $DefaultPermissions -Encoding ascii -ErrorAction Stop
-    } Catch [System.IO.IOException] {
-        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-        Write-Host "[!] Exiting..."
-        Break
-    }
-    Write-Host "[+] DCOM default LaunchPermission results written to $LaunchPermissionFile" -ForegroundColor Green
-
-    Return $DefaultPermissions
-}
-
-function Get-CLSID($DefaultLaunchPermission) {
-    Invoke-Command -Session $remotesession -ScriptBlock {
-        $DCOMCLSIDs = @()
-        $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
-            $_.Matches.Value
-        } 
-        (Get-ChildItem -Path HKCR:\CLSID\ ).Name.Replace("HKEY_CLASSES_ROOT\CLSID\","") | ForEach-Object {
-            if ($DCOMAppIDs -eq (Get-ItemProperty -Path HKCR:\CLSID\$_).'AppID') {
-                $DCOMCLSIDs += "Name: " + (Get-ItemProperty -Path HKCR:\CLSID\$_).'(default)' + "`nCLSID: $_`n"
-            }
-        }
-    } 
-
-    Try {
-        Out-File -FilePath .\$CLSIDFile -InputObject $DCOMCLSIDs -Encoding ascii -ErrorAction Stop
-    } Catch [System.IO.IOException] {
-        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-        Write-Host "[!] Exiting..."
-        Break
-    }
-    Write-Host "[+] DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
+    $PossibleVulnerable
 }
 
 if ($interactive) {
     Write-Host "[+] Attempting interactive session with $computername" -ForegroundColor Yellow
-    $remotesession = Get-InteractiveSession
+    $session = Get-InteractiveSession
 } else {
     Write-Host "[+] Attempting non-interactive session with $computername" -ForegroundColor Yellow
-    $remotesession = Get-NonInteractiveSession
+    $session = Get-NonInteractiveSession
 }
 
-Get-RPCRule
-$DCOMDefaultLaunchPermissions = Get-DefaultPermissions
-Get-CLSID($DCOMDefaultLaunchPermissions)
+Get-RPCRule($session)
+Get-DCOMApplication($session)
+Get-Vulnerable($session)
