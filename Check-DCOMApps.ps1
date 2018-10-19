@@ -92,13 +92,14 @@ function Get-InteractiveSession {
 
 # Check if the RPC firewall rule is present, returns True if it accepts external connections, False if the rule is not present
 function Get-RPCRule {
+    # Check if the RPC Firewall rule is present and allows external connections
     Write-Host "[i] Checking if $computername allows External RPC connections..." -ForegroundColor Yellow
     $CheckRPCRule = Invoke-Command -Session $remotesession {
         Get-ItemProperty -Path Registry::HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules | ForEach-Object {
             $_ -Match 'v2.10\|Action=Allow\|Active=TRUE\|Dir=In\|Protocol=6\|LPort=RPC'
         }
     }
-
+    # Add the RPC Firewall rule if not yet present on the target system
     if ($CheckRPCRule -eq $True) {
         Write-Host "[+] $computername allows external RPC connections!" -ForegroundColor Green
     } else {
@@ -117,12 +118,13 @@ function Get-RPCRule {
 
 # Check the DCOM applications on the target system and write these to a textfile
 function Get-DCOMApplications {
+    # Get DCOM applications
     Write-Host "[i] Retrieving DCOM applications." -ForegroundColor Yellow
-
     $DCOMApplications = Invoke-Command -Session $remotesession -ScriptBlock {
         Get-CimInstance Win32_DCOMapplication
     }
 
+    # Write the results to a text file
     Try {
         Out-File -FilePath .\$DCOMApplicationsFile -InputObject $DCOMApplications -Encoding ascii -ErrorAction Stop
     } Catch [System.IO.IOException] {
@@ -142,6 +144,7 @@ function Get-DefaultPermissions {
     } | Out-Null
 
     # Loop through the registry and check every key for the LaunchPermission property, we're only interested in the keys without this property
+    Write-Host "[i] Checking DCOM applications with default launch permissions..." -ForegroundColor Yellow
     Invoke-Command -Session $remotesession -ScriptBlock {
         Get-ChildItem -Path HKCR:\AppID\ | ForEach-Object {
             if(-Not($_.Property -Match "LaunchPermission")) {
@@ -170,30 +173,64 @@ function Get-DefaultPermissions {
 
 # Function to retrieve the CLSIDs for DCOM applications without LaunchPermissions set
 function Get-CLSID($DefaultLaunchPermission) {
-    Invoke-Command -Session $remotesession -ScriptBlock {
+    # Extract all the AppIDs from the list with the default LaunchPermissions
+    $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
+            $_.Matches.Value
+    }
+
+    Write-Host "[i] Retrieving CLSID's..." -ForegroundColor Yellow
+    $RemoteDCOMCLSIDs = Invoke-Command -Session $remotesession -ScriptBlock {
         # Define variable to store the results
         $DCOMCLSIDs = @()
-        # Extract all the AppIDs from the list with the default LaunchPermissions
-        $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
-            $_.Matches.Value
-        }
-        # Loop through the registry and check which AppID with default LaunchPermissions corresponds with which CLSID 
+        # Loop through the registry and check which AppID with default LaunchPermissions corresponds with which CLSID
         (Get-ChildItem -Path HKCR:\CLSID\ ).Name.Replace("HKEY_CLASSES_ROOT\CLSID\","") | ForEach-Object {
-            if ($DCOMAppIDs -eq (Get-ItemProperty -Path HKCR:\CLSID\$_).'AppID') {
-                $DCOMCLSIDs += "Name: " + (Get-ItemProperty -Path HKCR:\CLSID\$_).'(default)' + "`nCLSID: $_`n"
-            }
+            if ($Using:DCOMAppIDs -eq (Get-ItemProperty -Path HKCR:\CLSID\$_).'AppID') {
+                $DCOMCLSIDs += "Name: " + (Get-ItemProperty -Path HKCR:\CLSID\$_).'(default)' + " CLSID: $_"
+            } 
         }
-    } 
+        # Return the DCOM CLSIDs so these can be used locally
+        Return $DCOMCLSIDs
+    }
 
     # Write the output to a file
     Try {
-        Out-File -FilePath .\$CLSIDFile -InputObject $DCOMCLSIDs -Encoding ascii -ErrorAction Stop
+        Out-File -FilePath .\$CLSIDFile -InputObject $RemoteDCOMCLSIDs -Encoding ascii -ErrorAction Stop
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
         Write-Host "[!] Exiting..."
         Break
     }
     Write-Host "[+] DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
+
+    # Extract the DCOM CLSIDs for future usage
+    $ExtractedCLSIDs = $RemoteDCOMCLSIDs | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
+        $_.Matches.Value
+    }
+    
+    # Return the extracted CLSIDs
+    Return $ExtractedCLSIDs
+}
+
+# Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than 6 members
+function Get-MemberTypeCount($CLSIDs) {
+    $ErrorActionPreference = 'SilentlyContinue'
+    Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
+    $CLSIDCount = @()
+    $CLSIDs | ForEach-Object {
+        # Add a delay to prevent too much load
+        Start-Sleep -Milliseconds 500
+        Try {
+            $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$_","$computername"))
+            $MemberCount = ($com | Get-Member).Count
+            if (-not ($MemberCount -eq 6) -and ($MemberCount -gt 0)) {
+                $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
+            }
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+        } Catch {
+            Write-Host "CLSID: $_ Cannot be instantiated"
+        }
+    }
+    $CLSIDCount
 }
 
 if ($interactive) {
@@ -204,6 +241,11 @@ if ($interactive) {
     $remotesession = Get-NonInteractiveSession
 }
 
+# Test for the RPC Firewall rule
 Get-RPCRule
+# Get DCOM applications with default LaunchPermissions set
 $DCOMDefaultLaunchPermissions = Get-DefaultPermissions
-Get-CLSID($DCOMDefaultLaunchPermissions)
+# Get the CLSIDs of the DCOM applications with default LaunchPermissions
+$DCOMApplicationsCLSID = Get-CLSID($DCOMDefaultLaunchPermissions)
+# Test the amount of members by instantiating these as DCOM
+Get-MemberTypeCount($DCOMApplicationsCLSID)
