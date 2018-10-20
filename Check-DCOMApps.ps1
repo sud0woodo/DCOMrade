@@ -215,16 +215,22 @@ function Get-CLSID($DefaultLaunchPermission) {
 function Get-MemberTypeCount($CLSIDs) {
     $ErrorActionPreference = 'SilentlyContinue'
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
+    # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
+    # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
+    $DefaultMemberCount = ([activator]::CreateInstance([type]::GetTypeFromCLSID("00021401-0000-0000-C000-000000000046","$computername"))).Count
+    # Release the COM Object that was instantiated for getting the reference count of default MemberTypes
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($DefaultMemberCount) | Out-Null
     $CLSIDCount = @()
     $CLSIDs | ForEach-Object {
         # Add a delay to prevent too much load
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 250
         Try {
             $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$_","$computername"))
             $MemberCount = ($com | Get-Member).Count
-            if (-not ($MemberCount -eq 6) -and ($MemberCount -gt 0)) {
+            if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
                 $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
             }
+            # Release the instantiated COM object
             [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
         } Catch {
             Write-Host "CLSID: $_ Cannot be instantiated"
