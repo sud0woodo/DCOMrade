@@ -217,7 +217,17 @@ function Get-MemberTypeCount($CLSIDs) {
     TODO:
         - Think of a way to not start unnecessary application windows and/or processes
             + Maybe create a blacklist with known non-vulnerable/interesting DCOM CLSID's to skip?
+    
+            Blacklisted CLSIDs:
+            Name: Add to Windows Media Player list CLSID: {45597c98-80f6-4549-84ff-752cf55e2d29}
+            Name: Windows Media Player Burn Audio CD Handler CLSID: {cdc32574-7521-4124-90c3-8d5605a34933}
+            Name: Play with Windows Media Player CLSID: {ed1d0fdf-4414-470a-a56d-cfb68623fc58}
+            Name: MAPI Mail Previewer CLSID: {53BEDF0B-4E5B-4183-8DC9-B844344FA104}
+
+            There is a good chance that a lot of the installed applications on one of the machines in a Microsoft Windows domain have the same applications installed due to for example a WDWS (Windows Deployment Server).
+            Creating a base blacklist (See above blacklist) and giving the user the option to provide an additional blacklist might be a valuable option.
     #>
+
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
     # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
     # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
