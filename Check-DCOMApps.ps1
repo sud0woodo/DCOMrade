@@ -213,7 +213,11 @@ function Get-CLSID($DefaultLaunchPermission) {
 
 # Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than the default amount of MemberTypes
 function Get-MemberTypeCount($CLSIDs) {
-    $ErrorActionPreference = 'SilentlyContinue'
+    <#
+    TODO:
+        - Think of a way to not start unnecessary application windows and/or processes
+            + Maybe create a blacklist with known non-vulnerable/interesting DCOM CLSID's to skip?
+    #>
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
     # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
     # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
