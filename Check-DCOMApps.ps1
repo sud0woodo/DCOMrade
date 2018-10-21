@@ -211,25 +211,40 @@ function Get-CLSID($DefaultLaunchPermission) {
     Return $ExtractedCLSIDs
 }
 
-# Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than 6 members
+# Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than the default amount of MemberTypes
 function Get-MemberTypeCount($CLSIDs) {
     $ErrorActionPreference = 'SilentlyContinue'
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
+    # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
+    # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
+    $DefaultMemberCount = (([activator]::CreateInstance([type]::GetTypeFromCLSID("00021401-0000-0000-C000-000000000046","localhost"))) | Get-Member).Count
+    # Release the COM Object that was instantiated for getting the reference count of default MemberTypes
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($DefaultMemberCount) | Out-Null
     $CLSIDCount = @()
     $CLSIDs | ForEach-Object {
-        # Add a delay to prevent too much load
-        Start-Sleep -Milliseconds 500
         Try {
-            $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$_","$computername"))
-            $MemberCount = ($com | Get-Member).Count
-            if (-not ($MemberCount -eq 6) -and ($MemberCount -gt 0)) {
+            # Add a delay to prevent too much load
+            Start-Sleep -Milliseconds 250
+            # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+            $MemberCount = (([activator]::CreateInstance([type]::GetTypeFromCLSID("$_","$computername"))) | Get-Member).Count
+            # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
+            if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
                 $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
+                # Release the instantiated COM object
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+            } else {
+                # Release the instantiated COM object
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
             }
-            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
         } Catch {
             Write-Host "CLSID: $_ Cannot be instantiated"
         }
     }
+
+    # This process gets started in the background by instantiating its COM object
+    Stop-Process -Name iexplore
+
+    Write-Host "[+] The following COM objects might be interesting to look into: " -ForegroundColor Green
     $CLSIDCount
 }
 
