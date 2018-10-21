@@ -53,13 +53,17 @@ param(
     [String]$user,
 
     [Parameter(Mandatory=$False,Position=3)]
-    [Boolean]$interactive
+    [Boolean]$interactive,
+
+    [Parameter(Mandatory=$False,Position=4)]
+    [Boolean]$blacklist
     )
 
 # Define filenames to write to
 $DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
 $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
 $CLSIDFile = "DCOM_CLSID_$computername.txt"
+$CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
 
 # Create a new non-interactive Remote Powershell Session
 function Get-NonInteractiveSession {
@@ -217,39 +221,121 @@ function Get-MemberTypeCount($CLSIDs) {
     TODO:
         - Think of a way to not start unnecessary application windows and/or processes
             + Maybe create a blacklist with known non-vulnerable/interesting DCOM CLSID's to skip?
+    
+            Example Blacklisted CLSIDs:
+            Name: Add to Windows Media Player list CLSID: {45597c98-80f6-4549-84ff-752cf55e2d29}
+            Name: Windows Media Player Burn Audio CD Handler CLSID: {cdc32574-7521-4124-90c3-8d5605a34933}
+            Name: Play with Windows Media Player CLSID: {ed1d0fdf-4414-470a-a56d-cfb68623fc58}
+            Name: MAPI Mail Previewer CLSID: {53BEDF0B-4E5B-4183-8DC9-B844344FA104}
+
+            There is a good chance that a lot of the installed applications on one of the machines in a Microsoft Windows domain have the same applications installed due to for example a WDWS (Windows Deployment Server).
+            Creating a base blacklist (See above blacklist) and giving the user the option to provide an additional blacklist might be a valuable option.
     #>
+
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
+
     # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
     # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
-    $DefaultMemberCount = (([activator]::CreateInstance([type]::GetTypeFromCLSID("00021401-0000-0000-C000-000000000046","localhost"))) | Get-Member).Count
+    $DefaultMember = [activator]::CreateInstance([type]::GetTypeFromCLSID("00021401-0000-0000-C000-000000000046","$computername"))
+    $DefaultMemberCount = ($DefaultMember | Get-Member).Count
     # Release the COM Object that was instantiated for getting the reference count of default MemberTypes
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($DefaultMemberCount) | Out-Null
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($DefaultMember) | Out-Null
+
+    # Create an array to store the potentially interesting DCOM applications
     $CLSIDCount = @()
-    $CLSIDs | ForEach-Object {
-        Try {
-            # Add a delay to prevent too much load
-            Start-Sleep -Milliseconds 250
-            # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
-            $MemberCount = (([activator]::CreateInstance([type]::GetTypeFromCLSID("$_","$computername"))) | Get-Member).Count
-            # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
-            if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
-                $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
-                # Release the instantiated COM object
-                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
-            } else {
-                # Release the instantiated COM object
-                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+
+    $DefaultBlackList = Get-Content -Path .\BaseBlackList.txt
+    
+    # Execute the following if block if the blacklist parameter is set
+    if ($blacklist) {
+        # Create an array to use as a future blacklist of known non-vulnerable / interesting DCOM applications
+        $CustomBlackList = @()
+        $CLSIDs | ForEach-Object {
+            Try {
+                $CLSID = $_
+                # Add a delay to prevent too much load
+                Start-Sleep -Milliseconds 250
+                # Check if the CLSID is on the blacklist
+                if (-not ($CLSID | Select-String -Pattern $DefaultBlackList)) {
+                    # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+                    $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$CLSID","$computername"))
+                    $MemberCount = ($com | Get-Member).Count
+                    # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
+                    if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
+                        $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
+                        # Release the instantiated COM object
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+                    } else {
+                        # Add the CLSIDs to be blacklisted
+                        $CustomBlackList += $CLSID
+                        # Release the instantiated COM object
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+                    }
+                } else {
+                    Write-Host "[i] Blacklisted CLSID found, skipping..." -ForegroundColor Yellow
+                    [System.Console]::Out.Flush()
+                    $CustomBlackList += $CLSID
+                }
+            } Catch {
+                Write-Host "CLSID: $_ Cannot be instantiated"
+                [System.Console]::Out.Flush()
+                $CustomBlackList += $CLSID
             }
-        } Catch {
-            Write-Host "CLSID: $_ Cannot be instantiated"
         }
-    }
+        
+        # Call the function to write the blacklisted CLSIDs to
+        Create-CustomBlackList($CustomBlackList)
+
+    } else {
+        $CLSIDs | ForEach-Object {
+            Try {
+                $CLSID = $_
+                # Add a delay to prevent too much load
+                Start-Sleep -Milliseconds 250
+                # Check if the CLSID is on the blacklist
+                if (-not ($CLSID | Select-String -Pattern $DefaultBlackList)) {
+                    # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+                    $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$CLSID","$computername"))
+                    $MemberCount = ($com | Get-Member).Count
+                    # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
+                    if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
+                        $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
+                        # Release the instantiated COM object
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+                    } else {
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+                    }
+                } else {
+                    Write-Host "[i] Blacklisted CLSID found, skipping..." -ForegroundColor Yellow
+                    [System.Console]::Out.Flush()
+                }                
+            } Catch {
+                Write-Host "CLSID: $_ Cannot be instantiated"
+                [System.Console]::Out.Flush()
+            }
+        }
+    } 
 
     # This process gets started in the background by instantiating its COM object
     Stop-Process -Name iexplore
 
     Write-Host "[+] The following COM objects might be interesting to look into: " -ForegroundColor Green
     $CLSIDCount
+}
+
+# Function to provide the option to create a custom blacklist for future use on other machines in for example a Microsoft Windows domain
+function Create-CustomBlackList($BlackListedCLSIDs) {
+    Write-Host "[i] Custom blacklist parameter was given, building blacklist..." -ForegroundColor Yellow
+
+    Try {
+        Out-File -FilePath .\$CustomBlackListFile -InputObject $BlackListedCLSIDs -Encoding ascii -ErrorAction Stop
+        Write-Host "[i] Writing $($BlacklistedCLSIDs.Count) CLSIDs to the custom blacklist" -ForegroundColor Yellow
+    } Catch [System.IO.IOException] {
+        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
+        Write-Host "[!] Exiting..."
+        Break
+    }
+    Write-Host "[+] Blacklisted DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
 }
 
 if ($interactive) {
