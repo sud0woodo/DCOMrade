@@ -3,8 +3,10 @@
 Powershell script for checking possibly vulnerable DCOM applications.
 
 .DESCRIPTION
-This script is able to check if the external RPC allow Firewall rule is present in the target machine. Make sure you are able to use PSRemoting
+This script is able to check if the external RPC allow Firewall rule is present, enumerate the DCOM applications and check the Methods / Properties of the 
+DCOM applications for possible vulnerabilities. 
 
+The first check is the RPC check which verifies whether or not RPC connections from external are allowed.
 The RPC connection can be recognized in the Windows Firewall with the following query:
 v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC
 
@@ -13,6 +15,12 @@ HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\Fir
 
 If the rule is not present it is added with the following Powershell oneliner:
 New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'
+
+After adding the RPC firewall rule the script will enumerate the DCOM applications present on the machine and verify which CLSID belongs to which DCOM application.
+
+The DCOM applications will get instantiated by the script and the amount of MemberTypes present will be checked, the DCOM applications might be interesting if it doesn't
+hold the same as the default amount of MemberTypes (this is checked by counting the amount of MemberTypes when instantiating the default CLSID of "Shortcut") and holds more
+MemberTypes than 0.
 
 .PARAMETER computername
 The computername of the victim machine
@@ -23,13 +31,19 @@ The username of the victim
 .PARAMETER interactive
 Set this to $True if you want an interactive session with the machine
 
+.PARAMETER blacklist
+Set this to $True if you want to create a custom blacklist out of the CLSIDs that cannot be instantiated
+
 .EXAMPLE
-PS > Check-RemoteRPC.ps1 -computername victim -user alice
+PS > Check-DCOMApps.ps1 -computername victim -user alice
 Use this above command and parameters to start a non-interactive session
 
 .EXAMPLE
-PS > Check-RemoteRPC.ps1 -computername victim -user alice -interactive $True
+PS > Check-DCOMApps.ps1 -computername victim -user alice -interactive $True
 Use this command and parameters to start a interactive session
+
+.EXAMPLE
+PS > Check-DCOMApps.ps1 -computername victim -user alive -blacklist $True
 
 .LINK
 https://github.com/sud0woodo
@@ -39,9 +53,8 @@ Access to the local/domain administrator account on the target machine is needed
 To enable the features needed, execute the following commands:
 
 PS > Enable-PSRemoting -SkipNetworkProfileCheck -Force
-PS > Set-NetFirewallRule -Name "WINRM-HTTP-In-TCP-PUBLIC" -RemoteAddress Any
 
-Author: sud0woodo
+Author: Axel Boesenach
 #>
 
 # Assign arguments to parameters
@@ -64,6 +77,13 @@ $DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
 $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
 $CLSIDFile = "DCOM_CLSID_$computername.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
+
+# Add victim machine to trusted hosts
+# NOTE: This will prompt if you are sure you want to add the remote machine to the trusted hosts, press Y to confirm
+$TrustedClients = Get-Item WSMan:\localhost\Client\TrustedHosts
+if ($computername -notin $TrustedClients) {
+    Set-Item WSMan:\localhost\Client\TrustedHosts -Value "$computername" -Concatenate
+}
 
 # Create a new non-interactive Remote Powershell Session
 function Get-NonInteractiveSession {
@@ -230,55 +250,69 @@ function Get-MemberTypeCount($CLSIDs) {
 
             There is a good chance that a lot of the installed applications on one of the machines in a Microsoft Windows domain have the same applications installed due to for example a WDWS (Windows Deployment Server).
             Creating a base blacklist (See above blacklist) and giving the user the option to provide an additional blacklist might be a valuable option.
+        
+        - Create base blacklists based on Operating system version
+            + Windows 7
+            + Windows 8/8.1
+            + Windows 10
     #>
 
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
 
-    # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
-    # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
-    $DefaultMember = [activator]::CreateInstance([type]::GetTypeFromCLSID("00021401-0000-0000-C000-000000000046","$computername"))
-    $DefaultMemberCount = ($DefaultMember | Get-Member).Count
-    # Release the COM Object that was instantiated for getting the reference count of default MemberTypes
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($DefaultMember) | Out-Null
+    $DefaultMemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
+        # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
+        # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
+        $DefaultMember = [activator]::CreateInstance([type]::GetTypeFromCLSID("00021401-0000-0000-C000-000000000046","localhost"))
+        $DefaultMemberCount = ($DefaultMember | Get-Member).Count
+        # Release the COM Object that was instantiated for getting the reference count of default MemberTypes
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($DefaultMember) | Out-Null
+
+        Return $DefaultMemberCount
+    }
 
     # Create an array to store the potentially interesting DCOM applications
     $CLSIDCount = @()
 
+    # Read in the Blacklist 
     $DefaultBlackList = Get-Content -Path .\BaseBlackList.txt
     
     # Execute the following if block if the blacklist parameter is set
     if ($blacklist) {
         # Create an array to use as a future blacklist of known non-vulnerable / interesting DCOM applications
         $CustomBlackList = @()
+        # Loop over the list with CLSIDs to be tested
         $CLSIDs | ForEach-Object {
             Try {
                 $CLSID = $_
-                # Add a delay to prevent too much load
-                Start-Sleep -Milliseconds 250
                 # Check if the CLSID is on the blacklist
                 if (-not ($CLSID | Select-String -Pattern $DefaultBlackList)) {
-                    # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
-                    $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$CLSID","$computername"))
-                    $MemberCount = ($com | Get-Member).Count
+                    # Get the count of MemberType from the victim machine by instantiating it remotely 
+                    $MemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
+                        Try {
+                            # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+                            $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID("$Using:CLSID","localhost"))
+                            $MemberCount = ($COM | Get-Member).Count
+                            # Release the instantiated COM object
+                            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
+                            Return $MemberCount
+                        } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
+                            Write-Host "[i] Caught Exception CLSID: $Using:CLSID"
+                        }
+                    } 
                     # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
                     if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
-                        $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
-                        # Release the instantiated COM object
-                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+                        $CLSIDCount += "CLSID: $CLSID Count: " + $MemberCount
+                        
                     } else {
                         # Add the CLSIDs to be blacklisted
                         $CustomBlackList += $CLSID
-                        # Release the instantiated COM object
-                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
                     }
                 } else {
-                    Write-Host "[i] Blacklisted CLSID found, skipping..." -ForegroundColor Yellow
-                    [System.Console]::Out.Flush()
+                    #Write-Host "[i] Blacklisted CLSID found, skipping..." -ForegroundColor Yellow
                     $CustomBlackList += $CLSID
                 }
-            } Catch {
-                Write-Host "CLSID: $_ Cannot be instantiated"
-                [System.Console]::Out.Flush()
+            } Catch [System.UnauthorizedAccessException]{
+                Write-Host "CLSID: $CLSID Cannot be instantiated"
                 $CustomBlackList += $CLSID
             }
         }
@@ -294,30 +328,30 @@ function Get-MemberTypeCount($CLSIDs) {
                 Start-Sleep -Milliseconds 250
                 # Check if the CLSID is on the blacklist
                 if (-not ($CLSID | Select-String -Pattern $DefaultBlackList)) {
-                    # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
-                    $com = [activator]::CreateInstance([type]::GetTypeFromCLSID("$CLSID","$computername"))
-                    $MemberCount = ($com | Get-Member).Count
+                    $MemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
+                        Try {
+                        # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+                        $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID("$Using:CLSID","localhost"))
+                        $MemberCount = ($COM | Get-Member).Count
+                        # Release the instantiated COM object
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
+                        Return $MemberCount
+                        } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
+                            Write-Host "[i] Caught Exception CLSID: $Using:CLSID"
+                        }
+                    }
                     # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
                     if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
-                        $CLSIDCount += "CLSID: $_ Count: " + $MemberCount
-                        # Release the instantiated COM object
-                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
-                    } else {
-                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($com) | Out-Null
+                        $CLSIDCount += "CLSID: $CLSID Count: " + $MemberCount
                     }
                 } else {
                     Write-Host "[i] Blacklisted CLSID found, skipping..." -ForegroundColor Yellow
-                    [System.Console]::Out.Flush()
                 }                
             } Catch {
-                Write-Host "CLSID: $_ Cannot be instantiated"
-                [System.Console]::Out.Flush()
+                Write-Host "CLSID: $CLSID Cannot be instantiated"
             }
         }
-    } 
-
-    # This process gets started in the background by instantiating its COM object
-    Stop-Process -Name iexplore
+    }
 
     Write-Host "[+] The following COM objects might be interesting to look into: " -ForegroundColor Green
     $CLSIDCount
