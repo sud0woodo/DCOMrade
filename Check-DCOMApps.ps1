@@ -78,6 +78,7 @@ $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
 $CLSIDFile = "DCOM_CLSID_$computername.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
 $VulnerableSubsetFile = "VulnerableSubset.txt"
+$PossibleVulnerableFile = "Possible_Vuln_DCOMapps_$computername.txt"
 
 
 # Welcome logo
@@ -501,7 +502,18 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
         $VulnerableCLSID += $Vulnerable
     }
     # Output the potentially vulnerable MemberTypes and CLSIDs, remove duplicates
-    $VulnerableCLSID | Sort-Object -Unique
+    $OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
+
+    # Write the possible Vulnerable DCOM applications to file
+    Write-Host "[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
+    Try {
+        Out-File -FilePath .\$PossibleVulnerableFile -InputObject $OutputVulnerableCLSID -Encoding ascii -ErrorAction Stop
+        Write-Host "[i] Written possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
+    } Catch [System.IO.IOException] {
+        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
+        Write-Host "[!] Exiting..."
+        Break
+    }
 }
 
 if ($interactive) {
