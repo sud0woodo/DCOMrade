@@ -1,6 +1,5 @@
 Shell
-ShellCommand
-ExecuteShell
-ExecuteShellCommand
+Execute
 Navigate
-Navigate2
+DDEInitiate
+CreateObject
