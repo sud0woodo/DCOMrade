@@ -77,6 +77,7 @@ $DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
 $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
 $CLSIDFile = "DCOM_CLSID_$computername.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
+$VulnerableSubsetFile = "VulnerableSubset.txt"
 
 # Add victim machine to trusted hosts
 # NOTE: This will prompt if you are sure you want to add the remote machine to the trusted hosts, press Y to confirm
@@ -272,6 +273,10 @@ function Get-MemberTypeCount($CLSIDs) {
 
     # Create an array to store the potentially interesting DCOM applications
     $CLSIDCount = @()
+    # Create an array to store the potentially vulnerable DCOM applications
+    $VulnerableCLSID = @()
+    # Create an array to store errors as a log
+    $ErrorLog = @()
 
     # Read in the Blacklist 
     $DefaultBlackList = Get-Content -Path .\BaseBlackList.txt
@@ -296,12 +301,14 @@ function Get-MemberTypeCount($CLSIDs) {
                             [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
                             Return $MemberCount
                         } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
-                            Write-Host "[i] Caught Exception CLSID: $Using:CLSID"
+                            $ErrorLog += "[!] Caught Exception CLSID: $Using:CLSID"
                         }
                     } 
                     # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
                     if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
                         $CLSIDCount += "CLSID: $CLSID Count: " + $MemberCount
+                        # Add the potentially vulnerable CLSIDs to the array
+                        $VulnerableCLSID += $CLSID
                         
                     } else {
                         # Add the CLSIDs to be blacklisted
@@ -312,7 +319,7 @@ function Get-MemberTypeCount($CLSIDs) {
                     $CustomBlackList += $CLSID
                 }
             } Catch [System.UnauthorizedAccessException]{
-                Write-Host "CLSID: $CLSID Cannot be instantiated"
+                $ErrorLog += "[!] CLSID: $CLSID Cannot be instantiated"
                 $CustomBlackList += $CLSID
             }
         }
@@ -324,8 +331,6 @@ function Get-MemberTypeCount($CLSIDs) {
         $CLSIDs | ForEach-Object {
             Try {
                 $CLSID = $_
-                # Add a delay to prevent too much load
-                Start-Sleep -Milliseconds 250
                 # Check if the CLSID is on the blacklist
                 if (-not ($CLSID | Select-String -Pattern $DefaultBlackList)) {
                     $MemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
@@ -337,24 +342,32 @@ function Get-MemberTypeCount($CLSIDs) {
                         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
                         Return $MemberCount
                         } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
-                            Write-Host "[i] Caught Exception CLSID: $Using:CLSID"
+                            $ErrorLog += "[!] Caught Exception CLSID: $Using:CLSID"
                         }
                     }
                     # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
                     if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
                         $CLSIDCount += "CLSID: $CLSID Count: " + $MemberCount
+                        # Add the potentially vulnerable CLSIDs to the array
+                        $VulnerableCLSID += $CLSID
                     }
                 } else {
-                    Write-Host "[i] Blacklisted CLSID found, skipping..." -ForegroundColor Yellow
-                }                
+                    $ErrorLog += "[i] Blacklisted CLSID found: $CLSID"
+                }
+                                
             } Catch {
-                Write-Host "CLSID: $CLSID Cannot be instantiated"
+                $ErrorLog += "[!] CLSID: $CLSID Cannot be instantiated"
             }
         }
     }
 
+    Create-ErrorLog($ErrorLog)
+
     Write-Host "[+] The following COM objects might be interesting to look into: " -ForegroundColor Green
     $CLSIDCount
+
+    Write-Host "[+] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Green
+    Get-VulnerableDCOM($VulnerableCLSID)
 }
 
 # Function to provide the option to create a custom blacklist for future use on other machines in for example a Microsoft Windows domain
@@ -370,6 +383,76 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
         Break
     }
     Write-Host "[+] Blacklisted DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
+}
+
+function Create-ErrorLog ($ErrorLog) {
+    Write-Host "[i] Writing errors to logfile" -ForegroundColor Yellow
+
+    Try {
+        Out-File -FilePath .\"errorlog_$computername.txt" -InputObject $ErrorLog -Encoding ascii -ErrorAction Stop
+        Write-Host "[i] Writing $($BlacklistedCLSIDs.Count) CLSIDs to the custom blacklist" -ForegroundColor Yellow
+    } Catch [System.IO.IOException] {
+        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
+        Write-Host "[!] Exiting..."
+        Break
+    }
+    Write-Host "[+] Blacklisted DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
+}
+
+# Function that checks the possible vulnerable DCOM applications with the textfile of strings
+# NOTE: This checks with a maximal depth of 3
+function Get-VulnerableDCOM($VulnerableCLSIDs) {
+    # !!! NOTE !!!
+    # The following variable assignment is very bad practice, however I could not figure out how to suppress the errors thrown
+    $ErrorActionPreference = 'SilentlyContinue'
+
+    # Read in the subset file with strings that might indicate a vulnerability
+    $VulnerableSubset = Get-Content $VulnerableSubsetFile
+
+    # Create array to store potentially vulnerable CLSIDs
+    $VulnerableCLSID = @()
+
+    Write-Host "[i] This might take a while..."
+    # Loop over the interesting CLSIDs from the function Get-MemberTypeCount
+    $VulnerableCLSIDs | ForEach-Object {
+        $CLSID = $_ 
+        Write-Host "[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
+        $Vulnerable = Invoke-Command -Session $remotesession -ScriptBlock {
+            # Instantiate the CLSID
+            $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID($Using:CLSID, "localhost"))
+            # Get all the members of depth 1
+            $COMMembers1 = $COM | Get-Member | ForEach-Object {$_.Name}
+            # Create an array for members of depth 3
+            $COMMembers3 = @()
+            Try {
+                $COMMembers1 | ForEach-Object {
+                    $COMMember1 = $_
+                    $COMMembers2 = $COM.$COMMember1
+                    # Loop over depth 2
+                    $COMMembers2 | ForEach-Object {
+                        $COMMember2 = $_
+                        Get-Member -InputObject $COMMember2 | ForEach-Object {$_.Name} | ForEach-Object {
+                            $COMMember3 = $_
+                            if ((Get-Member -InputObject $COMMember2.$COMMember3).Count -ne 12) {
+                                Get-Member -InputObject $COMMember2.$COMMember3 | ForEach-Object {
+                                    if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
+                                        $COMMembers3 += "[+] Vulnerability found: $_ CLSID: $Using:CLSID"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Return $COMMembers3
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
+            } Catch [System.InvalidOperationException], [Microsoft.PowerShell.Commands.GetMemberCommand] {
+                Write-Host "[i] Caught exception"
+            }
+        }
+        $VulnerableCLSID += $Vulnerable
+    }
+    # Output the potentially vulnerable MemberTypes and CLSIDs
+    $VulnerableCLSID
 }
 
 if ($interactive) {
