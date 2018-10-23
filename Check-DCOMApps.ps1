@@ -79,29 +79,30 @@ $CLSIDFile = "DCOM_CLSID_$computername.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
 $VulnerableSubsetFile = "VulnerableSubset.txt"
 
-#TODO Welcome logo
-<#
-Write-Host "MMMMMMMMMMMMMMMMMMMMMWN" -f Yellow -nonewline; Write-Host "0OK" -f Red -nonewline; Write-Host "WMMMMMMMMMMMMM" -f Yellow 
-Write-Host "MMMMMMMMMMMMMMMMMMMMMMMN" -f Yellow -nonewline; Write-Host "OooO" -f Red -nonewline; Write-Host "XWMMMMMMMMMM" -f Yellow
-Write-Host "MMMMMMMMMMMMMMMMMMMMMMMMWK" -f Yellow -nonewline; Write-Host "o;cx" -f red -nonewline; Write-Host "KWMMMMMMMM" -f Yellow
-Write-Host "MMMMMMMMMMN0kxkOO0KXNWMMMMNk" -f Yellow -nonewline; Write-Host ":,:x" -f red -nonewline; Write-Host "KWMMMMMM" -f Yellow
-Write-Host "MMMMMMMMN0o" -f Yellow -nonewline; Write-Host ";'''',;lOX" -f Red -nonewline; Write-Host "NMMMMMW0" -f Yellow -nonewline; Write-Host "c,,:" -f Red -nonewline; Write-Host "kNMMMMM" -f Yellow
-Write-Host "MMMMMMNOl" -f Yellow -NoNewline; Write-Host ";'''''," -f Red -nonewline; Write-Host "ckXWMMMMMMMMWKl" -f Yellow -nonewline; Write-Host ",',o" -f Red -nonewline; Write-Host "KWMMM" -f Yellow
-Write-Host "MMMWNOl;" -f Yellow -NoNewline; Write-Host "'''''''" -f Red -nonewline; Write-Host "c0WMMMMMMMMMMMWKc" -f Yellow -nonewline; Write-Host "''," -f Red -nonewline; Write-Host "lKWMM" -f Yellow
-Write-Host "MMW0l,'''''','',ckXWMMMMMMMMMMWO:'',oXMM"
-Write-Host "MMMXkc,'',cxkl,'',ck0XWMMMMMMMMNd,'';xWM"
-Write-Host "MMMMWXkcckXWMNOl,'',;ckXWMMMMMMWk;'''lXM"
-Write-Host "MMMMMMWNNWMMMMWNOl,''',cxXWMMMMWO;'''lKM"
-Write-Host "MMMMMMMMMMMMMMMMMNOl;,'',cxXWMMNd,'''oXM"
-Write-Host "MMMMMMMMMMMMMMMMMMMNKOl,'',cxXNk:''';kWM"
-Write-Host "MMMMMMMWWX0OkOXWMMMMMMNkl,'',:c;''';xNMM"
-Write-Host "MMMMMWNOl:,,',cdk0KXNNNX0o;''''''':kNMMM"
-Write-Host "MMMWKkl;'';ll;''',;::cc::;,'''''',lKWMMM"
-Write-Host "MNOo:,',cxKNN0xl;,'''''''''',::,'',:xKWM"
-Write-Host "Ko,''',oKWMMMMMNKOkdddooodxk0XKkc,'',:xX"
-Write-Host "d,'',:xXMMMMMMMMMMMMMMWWMMMMMMMWXkc,'';x"
-Write-Host "Oc,;o0WMMMMMMMMMMMMMMMMMMMMMMMMMMWKo,,c0"
-#>
+
+# Welcome logo
+
+Write-Host "MMMMMMMMMMMMMMMMMMMMMWN" -f Yellow -nonewline; Write-Host "0O" -f Red -nonewline; Write-Host "KWMMMMMMMMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMMMMMMMMMMMMMMMMMN" -f Yellow -nonewline; Write-Host "OooO" -f Red -nonewline; Write-Host "XWMMMMMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMMMMMMMMMMMMMMMMMMWK" -f Yellow -nonewline; Write-Host "o;cx" -f red -nonewline; Write-Host "KWMMMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMMMMN0kxkOO0KXNWMMMMNk" -f Yellow -nonewline; Write-Host ":,:x" -f red -nonewline; Write-Host "KWMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMMN0o" -f Yellow -nonewline; Write-Host ";'''',;" -f Red -nonewline; Write-Host "lOXNMMMMMW0" -f Yellow -nonewline; Write-Host "c,,:" -f Red -nonewline; Write-Host "kNMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMNOl" -f Yellow -NoNewline; Write-Host ";'''''," -f Red -nonewline; Write-Host "ckXWMMMMMMMMWKl" -f Yellow -nonewline; Write-Host ",',o" -f Red -nonewline; Write-Host "KWMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMWNOl;" -f Yellow -NoNewline; Write-Host "'''''''" -f Red -nonewline; Write-Host "c0WMMMMMMMMMMMWKc" -f Yellow -nonewline; Write-Host "''," -f Red -nonewline; Write-Host "lKWMM" -f Yellow -NoNewline; Write-Host " ###DCOMrade###DCOMrade###DCOMrade###DCOMrade###DCOMrade###DCOMrade###### " -f Red
+Write-Host "MMW0l" -f Yellow -NoNewline; Write-Host ",'''''',''," -f Red -nonewline; Write-Host "ckXWMMMMMMMMMMWO" -f Yellow -nonewline; Write-Host ":'',o" -f Red -nonewline; Write-Host "XMM" -f Yellow -NoNewline; Write-Host " ######DCOMRADE###DCOMRADE###DCOMRADE###DCOMRADE###DCOMRADE###DCOMRADE### " -f Red
+Write-Host "MMMXkccx" -f Yellow -NoNewline; Write-Host ",'k',l,''," -f Red -nonewline; Write-Host "ck0XWMMMMMMMMNd" -f Yellow -nonewline; Write-Host ",'';" -f Red -nonewline; Write-Host "xWM" -f Yellow -NoNewline; Write-Host " ##########DCOMrade###DCOMrade###DCOMrade###DCOMrade###DCOMrade###DCOM### " -f Red
+Write-Host "MMMMWXkcckXWMNO" -f Yellow -NoNewline; Write-Host "l,'',;" -f Red -nonewline; Write-Host "ckXWMMMMMMWk" -f Yellow -nonewline; Write-Host ";'''" -f Red -nonewline; Write-Host "lXM" -f Yellow -NoNewline; Write-Host " ###" -f Red -NoNewline; Write-Host "   Powershell Script to enumerate vulnerable DCOM Applications" -f Yellow -NoNewline; Write-Host "    ### " -f Red
+Write-Host "MMMMMMWNNWMMMMWNO" -f Yellow -NoNewline; Write-Host "l,'''," -f Red -nonewline; Write-Host "cxXWMMMMWO" -f Yellow -nonewline; Write-Host ";'''" -f Red -nonewline; Write-Host "lKM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMMMMMMMMMMMNO" -f Yellow -NoNewline; Write-Host ",;,''," -f Red -nonewline; Write-Host "cxXWMMNd" -f Yellow -nonewline; Write-Host ",'''" -f Red -nonewline; Write-Host "oXM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMMMMMMMMMMMMMNKO" -f Yellow -NoNewline; Write-Host "l,''," -f Red -nonewline; Write-Host "cxXNk" -f Yellow -nonewline; Write-Host ":''';" -f Red -nonewline; Write-Host "kWM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMMMWWX0OkOXWMMMMMMNk" -f Yellow -NoNewline; Write-Host ",'',:c" -f Red -nonewline; Write-Host "" -f Yellow -nonewline; Write-Host ";'''; " -f Red -nonewline; Write-Host "xNMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMMMWNOl" -f Yellow -NoNewline; Write-Host ":,,'," -f Red -nonewline; Write-Host "cdk0KXNNNX" -f Yellow -nonewline; Write-Host "0o;''''''':" -f Red -nonewline; Write-Host "kNMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MMMWKkl" -f Yellow -NoNewline; Write-Host ";'';ll;''',;::cc::;,''''''," -f Red -nonewline; Write-Host "lKWMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "MNOo" -f Yellow -NoNewline; Write-Host ":,'," -f Red -nonewline; Write-Host "cxKNN0xl" -f Yellow -NoNewline; Write-Host ";,''''''''''," -f Red -nonewline; Write-Host "::" -f Yellow -NoNewline; Write-Host ",''," -f Red -nonewline; Write-Host ":xKWM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "Ko" -f Yellow -NoNewline; Write-Host ",'''," -f Red -nonewline; Write-Host "oKWMMMMMNKOkdddooodxk0XKkc" -f Yellow -NoNewline; Write-Host ",''," -f Red -nonewline; Write-Host ":xX" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "d" -f Yellow -NoNewline; Write-Host ",''," -f Red -nonewline; Write-Host ":xXMMMMMMMMMMMMMMWWMMMMMMMWXkc" -f Yellow -NoNewline; Write-Host ",''" -f Red -nonewline; Write-Host ";x" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+Write-Host "Oc,;" -f Yellow -NoNewline; Write-Host "o0WMMMMMMMMMMMMMMMMMMMMMMMMMMWKo" -f Yellow -NoNewline; Write-Host ",," -f Red -nonewline; Write-Host "c0" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
+
 
 # Add victim machine to trusted hosts
 # NOTE: This will prompt if you are sure you want to add the remote machine to the trusted hosts, press Y to confirm
@@ -423,10 +424,15 @@ function Create-ErrorLog ($ErrorLog) {
 }
 
 # Function that checks the possible vulnerable DCOM applications with the textfile of strings
-# NOTE: This checks with a maximal depth of 3
+# NOTE: This checks with a max depth of 3
 function Get-VulnerableDCOM($VulnerableCLSIDs) {
-    # !!! NOTE !!!
-    # The following variable assignment is very bad practice, however I could not figure out how to suppress the errors thrown
+    <# 
+    !!! NOTE !!!
+    The following variable assignment is very bad practice, however I could not figure out how to suppress the errors thrown
+    The suppressed errors are not of importance for enumerating this script. The errors are generated by looping over the 
+    DCOM MemberTypes, if there are no more MemberTypes but the depth is less than 3 it generates the error
+    !!! NOTE !!! 
+    #>
     $ErrorActionPreference = 'SilentlyContinue'
 
     # Read in the subset file with strings that might indicate a vulnerability
