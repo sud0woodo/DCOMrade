@@ -79,6 +79,30 @@ $CLSIDFile = "DCOM_CLSID_$computername.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
 $VulnerableSubsetFile = "VulnerableSubset.txt"
 
+#TODO Welcome logo
+<#
+Write-Host "MMMMMMMMMMMMMMMMMMMMMWN" -f Yellow -nonewline; Write-Host "0OK" -f Red -nonewline; Write-Host "WMMMMMMMMMMMMM" -f Yellow 
+Write-Host "MMMMMMMMMMMMMMMMMMMMMMMN" -f Yellow -nonewline; Write-Host "OooO" -f Red -nonewline; Write-Host "XWMMMMMMMMMM" -f Yellow
+Write-Host "MMMMMMMMMMMMMMMMMMMMMMMMWK" -f Yellow -nonewline; Write-Host "o;cx" -f red -nonewline; Write-Host "KWMMMMMMMM" -f Yellow
+Write-Host "MMMMMMMMMMN0kxkOO0KXNWMMMMNk" -f Yellow -nonewline; Write-Host ":,:x" -f red -nonewline; Write-Host "KWMMMMMM" -f Yellow
+Write-Host "MMMMMMMMN0o" -f Yellow -nonewline; Write-Host ";'''',;lOX" -f Red -nonewline; Write-Host "NMMMMMW0" -f Yellow -nonewline; Write-Host "c,,:" -f Red -nonewline; Write-Host "kNMMMMM" -f Yellow
+Write-Host "MMMMMMNOl" -f Yellow -NoNewline; Write-Host ";'''''," -f Red -nonewline; Write-Host "ckXWMMMMMMMMWKl" -f Yellow -nonewline; Write-Host ",',o" -f Red -nonewline; Write-Host "KWMMM" -f Yellow
+Write-Host "MMMWNOl;" -f Yellow -NoNewline; Write-Host "'''''''" -f Red -nonewline; Write-Host "c0WMMMMMMMMMMMWKc" -f Yellow -nonewline; Write-Host "''," -f Red -nonewline; Write-Host "lKWMM" -f Yellow
+Write-Host "MMW0l,'''''','',ckXWMMMMMMMMMMWO:'',oXMM"
+Write-Host "MMMXkc,'',cxkl,'',ck0XWMMMMMMMMNd,'';xWM"
+Write-Host "MMMMWXkcckXWMNOl,'',;ckXWMMMMMMWk;'''lXM"
+Write-Host "MMMMMMWNNWMMMMWNOl,''',cxXWMMMMWO;'''lKM"
+Write-Host "MMMMMMMMMMMMMMMMMNOl;,'',cxXWMMNd,'''oXM"
+Write-Host "MMMMMMMMMMMMMMMMMMMNKOl,'',cxXNk:''';kWM"
+Write-Host "MMMMMMMWWX0OkOXWMMMMMMNkl,'',:c;''';xNMM"
+Write-Host "MMMMMWNOl:,,',cdk0KXNNNX0o;''''''':kNMMM"
+Write-Host "MMMWKkl;'';ll;''',;::cc::;,'''''',lKWMMM"
+Write-Host "MNOo:,',cxKNN0xl;,'''''''''',::,'',:xKWM"
+Write-Host "Ko,''',oKWMMMMMNKOkdddooodxk0XKkc,'',:xX"
+Write-Host "d,'',:xXMMMMMMMMMMMMMMWWMMMMMMMWXkc,'';x"
+Write-Host "Oc,;o0WMMMMMMMMMMMMMMMMMMMMMMMMMMWKo,,c0"
+#>
+
 # Add victim machine to trusted hosts
 # NOTE: This will prompt if you are sure you want to add the remote machine to the trusted hosts, press Y to confirm
 $TrustedClients = Get-Item WSMan:\localhost\Client\TrustedHosts
