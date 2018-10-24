@@ -58,6 +58,7 @@ Author: Axel Boesenach
 #>
 
 # Assign arguments to parameters
+
 param(
     [Parameter(Mandatory=$True,Position=1)]
     [String]$computername,
@@ -89,9 +90,7 @@ $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
 $VulnerableSubsetFile = "VulnerableSubset.txt"
 $PossibleVulnerableFile = "Possible_Vuln_DCOMapps_$computername.txt"
 
-
 # Welcome logo
-
 Write-Host "MMMMMMMMMMMMMMMMMMMMMWN" -f Yellow -nonewline; Write-Host "0O" -f Red -nonewline; Write-Host "KWMMMMMMMMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
 Write-Host "MMMMMMMMMMMMMMMMMMMMMMMN" -f Yellow -nonewline; Write-Host "OooO" -f Red -nonewline; Write-Host "XWMMMMMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
 Write-Host "MMMMMMMMMMMMMMMMMMMMMMMMWK" -f Yellow -nonewline; Write-Host "o;cx" -f red -nonewline; Write-Host "KWMMMMMMMM" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
@@ -113,7 +112,6 @@ Write-Host "Ko" -f Yellow -NoNewline; Write-Host ",'''," -f Red -nonewline; Writ
 Write-Host "d" -f Yellow -NoNewline; Write-Host ",''," -f Red -nonewline; Write-Host ":xXMMMMMMMMMMMMMMWWMMMMMMMWXkc" -f Yellow -NoNewline; Write-Host ",''" -f Red -nonewline; Write-Host ";x" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
 Write-Host "Oc,;" -f Yellow -NoNewline; Write-Host "o0WMMMMMMMMMMMMMMMMMMMMMMMMMMWKo" -f Yellow -NoNewline; Write-Host ",," -f Red -nonewline; Write-Host "c0" -f Yellow -NoNewline; Write-Host " ######################################################################## " -f Red
 
-
 # Add victim machine to trusted hosts
 # NOTE: This will prompt if you are sure you want to add the remote machine to the trusted hosts, press Y to confirm
 $TrustedClients = Get-Item WSMan:\localhost\Client\TrustedHosts
@@ -123,6 +121,8 @@ if ($computername -notin $TrustedClients) {
 
 # Create a new non-interactive Remote Powershell Session
 function Get-NonInteractiveSession {
+
+    # Try connecting to the remote machine with the given computername and username
     Try {
         Write-Host "[i] Connecting to $computername" -ForegroundColor Yellow
         $session = New-PSSession -ComputerName $computername -Credential $computername\$user -ErrorAction Stop
@@ -137,6 +137,8 @@ function Get-NonInteractiveSession {
 
 # Create a new interactive Remote Powershell Session
 function Get-InteractiveSession {
+
+    # Try connecting to the remote machine with the given computername and username
     Try {
         Write-Host "[i] Connecting to $computername" -ForegroundColor Yellow
         $session = Enter-PSSession -ComputerName $computername -Credential $computername\$user -ErrorAction Stop
@@ -152,6 +154,7 @@ function Get-InteractiveSession {
 
 # Check if the RPC firewall rule is present, returns True if it accepts external connections, False if the rule is not present
 function Get-RPCRule {
+
     # Check if the RPC Firewall rule is present and allows external connections
     Write-Host "[i] Checking if $computername allows External RPC connections..." -ForegroundColor Yellow
     $CheckRPCRule = Invoke-Command -Session $remotesession {
@@ -159,6 +162,7 @@ function Get-RPCRule {
             $_ -Match 'v2.10\|Action=Allow\|Active=TRUE\|Dir=In\|Protocol=6\|LPort=RPC'
         }
     }
+
     # Add the RPC Firewall rule if not yet present on the target system
     if ($CheckRPCRule -eq $True) {
         Write-Host "[+] $computername allows external RPC connections!" -ForegroundColor Green
@@ -178,6 +182,7 @@ function Get-RPCRule {
 
 # Check the DCOM applications on the target system and write these to a textfile
 function Get-DCOMApplications {
+
     # Get DCOM applications
     Write-Host "[i] Retrieving DCOM applications." -ForegroundColor Yellow
     $DCOMApplications = Invoke-Command -Session $remotesession -ScriptBlock {
@@ -192,12 +197,15 @@ function Get-DCOMApplications {
         Write-Host "[!] Exiting..."
         Break
     }
+
     Write-Host "[+] DCOM applications retrieved and written to $DCOMApplicationsFile." -ForegroundColor Green
+
     Return $DCOMApplications  
 }
 
 # Function that checks for the default permissions parameter in the registry and cross references this with the available DCOM Applications on the system
 function Get-DefaultPermissions {
+
     # Map the path to HKEY_CLASSES_ROOT
     Invoke-Command -Session $remotesession -ScriptBlock {
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT
@@ -213,12 +221,15 @@ function Get-DefaultPermissions {
         } 
     } -OutVariable DefaultPermissionsAppID | Out-Null 
 
+
     # Store the DCOM applications present on the target machine in a variable
     $DCOMApplications = Get-DCOMApplications($remotesession)
+
     # Check which DCOM applications have the default permissions set
     $DefaultPermissions = $DCOMApplications | Select-String -Pattern $DefaultPermissionsAppID
     Write-Host "[+] Found $($DefaultPermissions.Count) DCOM applications without 'LaunchPermission' subkey!" -ForegroundColor Green
 
+    # Write the results to the LaunchPermissionFile
     Try {
         Out-File -FilePath .\$LaunchPermissionFile -InputObject $DefaultPermissions -Encoding ascii -ErrorAction Stop
     } Catch [System.IO.IOException] {
@@ -226,6 +237,7 @@ function Get-DefaultPermissions {
         Write-Host "[!] Exiting..."
         Break
     }
+
     Write-Host "[+] DCOM default LaunchPermission results written to $LaunchPermissionFile" -ForegroundColor Green
 
     Return $DefaultPermissions
@@ -233,6 +245,7 @@ function Get-DefaultPermissions {
 
 # Function to retrieve the CLSIDs for DCOM applications without LaunchPermissions set
 function Get-CLSID($DefaultLaunchPermission) {
+
     # Extract all the AppIDs from the list with the default LaunchPermissions
     $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
             $_.Matches.Value
@@ -248,6 +261,7 @@ function Get-CLSID($DefaultLaunchPermission) {
                 $DCOMCLSIDs += "Name: " + (Get-ItemProperty -Path HKCR:\CLSID\$_).'(default)' + " CLSID: $_"
             } 
         }
+
         # Return the DCOM CLSIDs so these can be used locally
         Return $DCOMCLSIDs
     }
@@ -313,6 +327,8 @@ function Get-MemberTypeCount($CLSIDs) {
     # Create an array to store errors as a log
     $ErrorLog = @()
 
+    
+
     # Read in the Blacklist depending on which OS was chosen
     switch($os) {
         "win7" {
@@ -337,6 +353,7 @@ function Get-MemberTypeCount($CLSIDs) {
                     $MemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
                         Try {
                             # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+                            Write-Host -NoNewline "`r[i] Checking CLSID: $Using:CLSID" -ForegroundColor Yellow
                             $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID("$Using:CLSID","localhost"))
                             $MemberCount = ($COM | Get-Member).Count
                             # Release the instantiated COM object
@@ -368,7 +385,7 @@ function Get-MemberTypeCount($CLSIDs) {
         
         # Call the function to write the blacklisted CLSIDs to
         Create-CustomBlackList($CustomBlackList)
-
+    $ProgressCount = 1       
     } else {
         $CLSIDs | ForEach-Object {
             Try {
@@ -378,11 +395,12 @@ function Get-MemberTypeCount($CLSIDs) {
                     $MemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
                         Try {
                         # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
-                        Write-Host "[+] Checking CLSID: $Using:CLSID"
+                        Write-Host -NoNewline "`r[i] Checking CLSID: $Using:CLSID" -ForegroundColor Yellow
                         $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID("$Using:CLSID","localhost"))
                         $MemberCount = ($COM | Get-Member).Count
                         # Release the instantiated COM object
                         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
+                        $ProgressCount++
                         Return $MemberCount
                         } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
                             $ErrorLog += "[!] Caught Exception CLSID: $Using:CLSID"
@@ -415,6 +433,7 @@ function Get-MemberTypeCount($CLSIDs) {
 
 # Function to provide the option to create a custom blacklist for future use on other machines in for example a Microsoft Windows domain
 function Create-CustomBlackList($BlackListedCLSIDs) {
+
     Write-Host "[i] Custom blacklist parameter was given, building blacklist..." -ForegroundColor Yellow
 
     Try {
@@ -429,7 +448,8 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
 }
 
 function Create-ErrorLog ($ErrorLog) {
-    Write-Host "[i] Writing errors to logfile" -ForegroundColor Yellow
+    
+    Write-Host "`n[i] Writing errors to logfile" -ForegroundColor Yellow
 
     Try {
         Out-File -FilePath .\"errorlog_$computername.txt" -InputObject $ErrorLog -Encoding ascii -ErrorAction Stop
@@ -463,7 +483,7 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     # Loop over the interesting CLSIDs from the function Get-MemberTypeCount
     $VulnerableCLSIDs | ForEach-Object {
         $CLSID = $_ 
-        Write-Host "[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
+        Write-Host -NoNewline "`r[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
         $Vulnerable = Invoke-Command -Session $remotesession -ScriptBlock {
             # Instantiate the CLSID
             $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID($Using:CLSID, "localhost"))
@@ -522,7 +542,7 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     $OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
 
     # Write the possible Vulnerable DCOM applications to file
-    Write-Host "[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
+    Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
     Try {
         Out-File -FilePath .\$PossibleVulnerableFile -InputObject $OutputVulnerableCLSID -Encoding ascii -ErrorAction Stop
         Write-Host "[i] Written possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow

@@ -3,3 +3,8 @@ Execute
 Navigate
 DDEInitiate
 CreateObject
+RegisterXLL
+ExecuteLine
+NewCurrentDatabase
+Service
+Create
