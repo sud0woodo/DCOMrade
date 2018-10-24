@@ -65,10 +65,14 @@ param(
     [Parameter(Mandatory=$True,Position=2)]
     [String]$user,
 
-    [Parameter(Mandatory=$False,Position=3)]
-    [Boolean]$interactive,
+    [Parameter(Mandatory=$True,Position=3)]
+    [ValidateSet("win7","win10")]
+    [String]$os,
 
     [Parameter(Mandatory=$False,Position=4)]
+    [Boolean]$interactive,
+
+    [Parameter(Mandatory=$False,Position=5)]
     [Boolean]$blacklist
     )
 
@@ -76,7 +80,12 @@ param(
 $DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
 $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
 $CLSIDFile = "DCOM_CLSID_$computername.txt"
+
+# Create two blacklists: Windows 7 and Windows 10
+$Win7BlackListFile = "Win7BlacklistedCLSIDS.txt"
+$Win10BlackListFile = "Win10BlackListedCLSIDS.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
+
 $VulnerableSubsetFile = "VulnerableSubset.txt"
 $PossibleVulnerableFile = "Possible_Vuln_DCOMapps_$computername.txt"
 
@@ -304,8 +313,15 @@ function Get-MemberTypeCount($CLSIDs) {
     # Create an array to store errors as a log
     $ErrorLog = @()
 
-    # Read in the Blacklist 
-    $DefaultBlackList = Get-Content -Path .\BaseBlackList.txt
+    # Read in the Blacklist depending on which OS was chosen
+    switch($os) {
+        "win7" {
+            $DefaultBlackList = Get-Content -Path $Win7BlackListFile
+        }
+        "win10" {
+            $DefaultBlackList = Get-Content -Path $Win10BlackListFile
+        }
+    }
     
     # Execute the following if block if the blacklist parameter is set
     if ($blacklist) {
@@ -362,6 +378,7 @@ function Get-MemberTypeCount($CLSIDs) {
                     $MemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
                         Try {
                         # Instantiate the COM object by providing the CLSID and computername and count the number of MemberTypes
+                        Write-Host "[+] Checking CLSID: $Using:CLSID"
                         $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID("$Using:CLSID","localhost"))
                         $MemberCount = ($COM | Get-Member).Count
                         # Release the instantiated COM object
