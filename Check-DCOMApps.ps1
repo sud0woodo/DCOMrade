@@ -28,6 +28,9 @@ The computername of the victim machine
 .PARAMETER user
 The username of the victim
 
+.PARAMETER os
+The operating system of the target machine
+
 .PARAMETER interactive
 Set this to $True if you want an interactive session with the machine
 
@@ -35,15 +38,17 @@ Set this to $True if you want an interactive session with the machine
 Set this to $True if you want to create a custom blacklist out of the CLSIDs that cannot be instantiated
 
 .EXAMPLE
-PS > Check-DCOMApps.ps1 -computername victim -user alice
-Use this above command and parameters to start a non-interactive session
+PS > Check-DCOMApps.ps1 -computername victim -user alice -os win10
+Use this above command and parameters to start a non-interactive session when the target system is a Windows 10 machine
 
 .EXAMPLE
-PS > Check-DCOMApps.ps1 -computername victim -user alice -interactive $True
-Use this command and parameters to start a interactive session
+PS > Check-DCOMApps.ps1 -computername victim -user alice -os win10 -interactive $True
+Use this command and parameters to start a interactive session when the target system is a Windows 10 machine
 
 .EXAMPLE
-PS > Check-DCOMApps.ps1 -computername victim -user alive -blacklist $True
+PS > Check-DCOMApps.ps1 -computername victim -user alive -os win10 -blacklist $True
+Use this command and parameters to start a non-interactive session that writes a custom BLSID based on CLSIDs that could not get instantiated
+This is a good option when in a Windows domain where the machines have the same software installed (avoids unnecessary hanging of the script)
 
 .LINK
 https://github.com/sud0woodo
@@ -80,6 +85,7 @@ param(
 # Define filenames to write to
 $DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
 $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$computername.txt"
+$MemberTypeCountFile = "CLSID_MemberTypeCount_$computername.txt"
 $CLSIDFile = "DCOM_CLSID_$computername.txt"
 
 # Create two blacklists: Windows 7 and Windows 10
@@ -277,7 +283,7 @@ function Get-CLSID($DefaultLaunchPermission) {
     Write-Host "[+] DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
 
     # Extract the DCOM CLSIDs for future usage
-    $ExtractedCLSIDs = $RemoteDCOMCLSIDs | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
+    $ExtractedCLSIDs = $RemoteDCOMCLSIDs | Select-String -Pattern '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}' | ForEach-Object {
         $_.Matches.Value
     }
     
@@ -327,12 +333,11 @@ function Get-MemberTypeCount($CLSIDs) {
     # Create an array to store errors as a log
     $ErrorLog = @()
 
-    
-
     # Read in the Blacklist depending on which OS was chosen
     switch($os) {
         "win7" {
             $DefaultBlackList = Get-Content -Path $Win7BlackListFile
+            Break
         }
         "win10" {
             $DefaultBlackList = Get-Content -Path $Win10BlackListFile
@@ -345,6 +350,8 @@ function Get-MemberTypeCount($CLSIDs) {
         $CustomBlackList = @()
         # Loop over the list with CLSIDs to be tested
         $CLSIDs | ForEach-Object {
+            # Add a little bit of delay to reduce the load
+            Start-Sleep -Milliseconds 300
             Try {
                 $CLSID = $_
                 # Check if the CLSID is on the blacklist
@@ -385,9 +392,11 @@ function Get-MemberTypeCount($CLSIDs) {
         
         # Call the function to write the blacklisted CLSIDs to
         Create-CustomBlackList($CustomBlackList)
-    $ProgressCount = 1       
+    
     } else {
         $CLSIDs | ForEach-Object {
+            # Add a little bit of delay to reduce the load
+            Start-Sleep -Milliseconds 300
             Try {
                 $CLSID = $_
                 # Check if the CLSID is on the blacklist
@@ -400,7 +409,6 @@ function Get-MemberTypeCount($CLSIDs) {
                         $MemberCount = ($COM | Get-Member).Count
                         # Release the instantiated COM object
                         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
-                        $ProgressCount++
                         Return $MemberCount
                         } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
                             $ErrorLog += "[!] Caught Exception CLSID: $Using:CLSID"
@@ -427,7 +435,17 @@ function Get-MemberTypeCount($CLSIDs) {
     Write-Host "[+] The following COM objects might be interesting to look into: " -ForegroundColor Green
     $CLSIDCount
 
-    Write-Host "[+] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Green
+    Try {
+        Write-Host "[i] Writing CLSIDs without default MemberType count to $MemberTypeCountFile" -NoNewline -ForegroundColor Yellow
+        Out-File -FilePath .\$MemberTypeCountFile -InputObject $CLSIDCount -Encoding ascii -ErrorAction Stop
+        Write-Host "`r[i] Written CLSIDs without default MemberType count to $MemberTypeCountFile" -ForegroundColor Yellow
+    } Catch [System.IO.IOException] {
+        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
+        Write-Host "[!] Exiting..."
+        Break
+    }
+
+    Write-Host "[i] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Yellow
     Get-VulnerableDCOM($VulnerableCLSID)
 }
 
@@ -437,8 +455,9 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
     Write-Host "[i] Custom blacklist parameter was given, building blacklist..." -ForegroundColor Yellow
 
     Try {
+        Write-Host "[i] Writing $($BlacklistedCLSIDs.Count) CLSIDs to the custom blacklist" -NoNewline -ForegroundColor Yellow
         Out-File -FilePath .\$CustomBlackListFile -InputObject $BlackListedCLSIDs -Encoding ascii -ErrorAction Stop
-        Write-Host "[i] Writing $($BlacklistedCLSIDs.Count) CLSIDs to the custom blacklist" -ForegroundColor Yellow
+        Write-Host "`r[i] Written $($BlacklistedCLSIDs.Count) CLSIDs to $BlackListedCLSIDs" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
         Write-Host "[!] Exiting..."
@@ -448,21 +467,20 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
 }
 
 function Create-ErrorLog ($ErrorLog) {
-    
-    Write-Host "`n[i] Writing errors to logfile" -ForegroundColor Yellow
 
     Try {
+        Write-Host "`n[i] Writing $($ErrorLog.Count) errors to logfile" -NoNewline -ForegroundColor Yellow
         Out-File -FilePath .\"errorlog_$computername.txt" -InputObject $ErrorLog -Encoding ascii -ErrorAction Stop
+        Write-Host "`r[i] Written $($ErrorLog.Count) errors to logfile" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
         Write-Host "[!] Exiting..."
         Break
     }
-    Write-Host "[+] Blacklisted DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
 }
 
 # Function that checks the possible vulnerable DCOM applications with the textfile of strings
-# NOTE: This checks with a max depth of 3
+# NOTE: This checks with a max depth of 4
 function Get-VulnerableDCOM($VulnerableCLSIDs) {
     <# 
     !!! NOTE !!!
@@ -487,12 +505,18 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
         $Vulnerable = Invoke-Command -Session $remotesession -ScriptBlock {
             # Instantiate the CLSID
             $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID($Using:CLSID, "localhost"))
-            # Get all the members of depth 1
+            # Get all the MemberType names of the $COM instantiation for future use
             $COMMemberNames1 = $COM | Get-Member | ForEach-Object {$_.Name}
             # Create an array for members of depth 3
             $COMMembers3 = @()
             Try {
                 # Loop over the members and their names (Depth 1)
+                $COM | Get-Member | ForEach-Object {
+                    if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
+                        $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $_.Name
+                    }
+                }
+                # Loop over the members and their names (Depth 2)
                 $COMMemberNames1 | ForEach-Object {
                     $COMName1 = $_
                     $COMMembers2 = $COM.$COMName1
@@ -500,22 +524,22 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
                         Get-Member -InputObject $COMMembers2 | ForEach-Object {
                             # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                             if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                                $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + $COM + "." + $COMName1
+                                $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $COMName1 + "." + $_.Name
                             }
                         }
                     }
-                    # Loop over the members and their names (Depth 2)
+                    # Loop over the members and their names (Depth 3)
                     $COMMembers2 | ForEach-Object {
                         $COMMember2 = $_
                         if ((Get-Member -InputObject $COMMember2).Count -ne 12) {
                             Get-Member -InputObject $COMMember2 | ForEach-Object {
                                 # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                 if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                                    $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + $COM + "." + $COMName1 + "." + $_.Name
+                                    $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $COMName1 + "." + $_.Name
                                 }
                             }
                         }
-                        # Loop over the members and their names (Depth 3)
+                        # Loop over the members and their names (Depth 4)
                         Get-Member -InputObject $COMMember2 | ForEach-Object {$_.Name} | ForEach-Object {
                             $COMMember3 = $_
                             $COMName2 = $COMMember2.$COMMember3
@@ -523,7 +547,7 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
                                 Get-Member -InputObject $COMName2 | ForEach-Object {
                                     # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                     if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                                        $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + $COM + "." + $COMName1 + "." + $COMMember3 + "." + $_.Name
+                                        $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $COMName1 + "." + $COMMember3 + "." + $_.Name
                                     }
                                 }
                             }
@@ -538,14 +562,16 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
         }
         $VulnerableCLSID += $Vulnerable
     }
-    # Output the potentially vulnerable MemberTypes and CLSIDs, remove duplicates
+    # Store the potentially vulnerable MemberTypes and CLSIDs, remove duplicates
     $OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
 
     # Write the possible Vulnerable DCOM applications to file
-    Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
+    
     Try {
-        Out-File -FilePath .\$PossibleVulnerableFile -InputObject $OutputVulnerableCLSID -Encoding ascii -ErrorAction Stop
-        Write-Host "[i] Written possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
+        Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline -ForegroundColor Yellow
+        "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n`n`n" | Out-File .\$PossibleVulnerableFile 
+        Out-File -FilePath .\$PossibleVulnerableFile -InputObject $OutputVulnerableCLSID -Encoding ascii -Append -ErrorAction Stop
+        Write-Host "`r[i] Written possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
         Write-Host "[!] Exiting..."
