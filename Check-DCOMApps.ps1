@@ -396,7 +396,7 @@ function Get-MemberTypeCount($CLSIDs) {
     } else {
         $CLSIDs | ForEach-Object {
             # Add a little bit of delay to reduce the load
-            Start-Sleep -Milliseconds 300
+            Start-Sleep -Milliseconds 200
             Try {
                 $CLSID = $_
                 # Check if the CLSID is on the blacklist
@@ -501,6 +501,8 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     Write-Host "[i] This might take a while...`n" -ForegroundColor Yellow
     # Loop over the interesting CLSIDs from the function Get-MemberTypeCount
     $VulnerableCLSIDs | ForEach-Object {
+        # Add a slight delay between each loop
+        Start-Sleep -Milliseconds 200
         $CLSID = $_ 
         Write-Host -NoNewline "`r[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
         $Vulnerable = Invoke-Command -Session $remotesession -ScriptBlock {
@@ -509,54 +511,54 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
             # Get all the MemberType names of the $COM instantiation for future use
             $COMMemberNames1 = $COM | Get-Member | ForEach-Object {$_.Name}
             # Create an array for members of depth 3
-            $COMMembers3 = @()
+            $VulnCOM = @()
             Try {
                 # Loop over the members and their names (Depth 1)
                 $COM | Get-Member | ForEach-Object {
                     if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                        $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $_.Name
+                        $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $_.Name
                     }
                 }
                 # Loop over the members and their names (Depth 2)
                 $COMMemberNames1 | ForEach-Object {
-                    $COMName1 = $_
-                    $COMMembers2 = $COM.$COMName1
-                    if ((Get-Member -InputObject $COMMembers2).Count -ne 12) {
-                        Get-Member -InputObject $COMMembers2 | ForEach-Object {
+                    $NameDepth1 = $_
+                    $COMDepth1 = $COM.$NameDepth1
+                    if ((Get-Member -InputObject $COMDepth1).Count -ne 12) {
+                        Get-Member -InputObject $COMDepth1 | ForEach-Object {
                             # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                             if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                                $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $COMName1 + "." + $_.Name
+                                $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
                             }
                         }
                     }
                     # Loop over the members and their names (Depth 3)
-                    $COMMembers2 | ForEach-Object {
-                        $COMMember2 = $_
-                        if ((Get-Member -InputObject $COMMember2).Count -ne 12) {
-                            Get-Member -InputObject $COMMember2 | ForEach-Object {
+                    $COMDepth1 | ForEach-Object {
+                        $COMDepth2 = $_
+                        if ((Get-Member -InputObject $COMDepth2).Count -ne 12) {
+                            Get-Member -InputObject $COMDepth2 | ForEach-Object {
                                 # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                 if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                                    $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $COMName1 + "." + $_.Name
+                                    $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
                                 }
                             }
                         }
                         # Loop over the members and their names (Depth 4)
-                        Get-Member -InputObject $COMMember2 | ForEach-Object {$_.Name} | ForEach-Object {
-                            $COMMember3 = $_
-                            $COMName2 = $COMMember2.$COMMember3
-                            if ((Get-Member -InputObject $COMName2).Count -ne 12) {
-                                Get-Member -InputObject $COMName2 | ForEach-Object {
+                        Get-Member -InputObject $COMDepth2 | ForEach-Object {$_.Name} | ForEach-Object {
+                            $COMDepth3 = $_
+                            $NameDepth2 = $COMDepth2.$COMDepth3
+                            if ((Get-Member -InputObject $NameDepth2).Count -ne 12) {
+                                Get-Member -InputObject $NameDepth2 | ForEach-Object {
                                     # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                     if ($_.Name | Select-String -Pattern $Using:VulnerableSubset) {
-                                        $COMMembers3 += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $COMName1 + "." + $COMMember3 + "." + $_.Name
+                                        $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $Using:CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $COMDepth3 + "." + $_.Name
                                     }
                                 }
                             }
                         }
                     }
                 }
-                Return $COMMembers3
-                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
+                Return $VulnCOM
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
             } Catch [System.InvalidOperationException], [Microsoft.PowerShell.Commands.GetMemberCommand] {
                 Write-Host "[i] Caught exception"
             }
@@ -564,13 +566,13 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
         $VulnerableCLSID += $Vulnerable
     }
     # Store the potentially vulnerable MemberTypes and CLSIDs, remove duplicates
-    $OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
+    #$OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
 
     # Write the possible Vulnerable DCOM applications to file
     Try {
         Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline -ForegroundColor Yellow
-        "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n`n`n" | Out-File .\$PossibleVulnerableFile 
-        Out-File -FilePath .\$PossibleVulnerableFile -InputObject $OutputVulnerableCLSID -Encoding ascii -Append -ErrorAction Stop
+        "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n" | Out-File .\$PossibleVulnerableFile 
+        Out-File -FilePath .\$PossibleVulnerableFile -InputObject $VulnerableCLSID -Append -ErrorAction Stop
         Write-Host "`r[i] Written possible vulnerable DCOM applications to: $PossibleVulnerableFile" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
