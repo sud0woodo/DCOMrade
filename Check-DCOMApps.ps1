@@ -466,6 +466,7 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
     Write-Host "[+] Blacklisted DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
 }
 
+# Function to write errors or blacklisted occurences to an errorlog
 function Create-ErrorLog ($ErrorLog) {
 
     Try {
@@ -566,7 +567,6 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     $OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
 
     # Write the possible Vulnerable DCOM applications to file
-    
     Try {
         Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline -ForegroundColor Yellow
         "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n`n`n" | Out-File .\$PossibleVulnerableFile 
