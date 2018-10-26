@@ -41,11 +41,9 @@ Set this to $True if you want to create a custom blacklist out of the CLSIDs tha
 PS > Check-DCOMApps.ps1 -computername victim -user alice -os win10
 Use this above command and parameters to start a non-interactive session when the target system is a Windows 10 machine
 
-.EXAMPLE
 PS > Check-DCOMApps.ps1 -computername victim -user alice -os win10 -interactive $True
 Use this command and parameters to start a interactive session when the target system is a Windows 10 machine
 
-.EXAMPLE
 PS > Check-DCOMApps.ps1 -computername victim -user alive -os win10 -blacklist $True
 Use this command and parameters to start a non-interactive session that writes a custom BLSID based on CLSIDs that could not get instantiated
 This is a good option when in a Windows domain where the machines have the same software installed (avoids unnecessary hanging of the script)
@@ -81,6 +79,8 @@ param(
     [Parameter(Mandatory=$False,Position=5)]
     [Boolean]$blacklist
     )
+
+$CurrentDate = Get-Date
 
 # Define filenames to write to
 $DCOMApplicationsFile = "DCOM_Applications_$computername.txt"
@@ -205,7 +205,6 @@ function Get-DCOMApplications {
     }
 
     Write-Host "[+] DCOM applications retrieved and written to $DCOMApplicationsFile." -ForegroundColor Green
-
     Return $DCOMApplications  
 }
 
@@ -245,7 +244,6 @@ function Get-DefaultPermissions {
     }
 
     Write-Host "[+] DCOM default LaunchPermission results written to $LaunchPermissionFile" -ForegroundColor Green
-
     Return $DefaultPermissions
 }
 
@@ -253,7 +251,7 @@ function Get-DefaultPermissions {
 function Get-CLSID($DefaultLaunchPermission) {
 
     # Extract all the AppIDs from the list with the default LaunchPermissions
-    $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}\}' | ForEach-Object {
+    $DCOMAppIDs = $DefaultLaunchPermission | Select-String -Pattern '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}' | ForEach-Object {
             $_.Matches.Value
     }
 
@@ -581,6 +579,105 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     }
 }
 
+# Function to generate the HTML report with the results
+function HTMLReport {
+
+    $ReportData = @()
+
+    $ImagePath = ".\logo_hackdefense.png"
+    $ImageBits =  [Convert]::ToBase64String((Get-Content $ImagePath -Encoding Byte))
+    $ImageFile = Get-Item $ImagePath
+    $ImageType = $ImageFile.Extension.Substring(1) #strip off the leading .
+    $ImageTag = "<Img src='data:image/$ImageType;base64,$($ImageBits)' Alt='$($ImageFile.Name)' style='float:left' width='120' height='120' hspace=10><br><br><br><br>"
+
+    $ReportData += $ImageTag
+    $ReportData += "<br><br>"
+    $ReportData += "<H2>OS Info</H2>"
+
+    $ReportData += Invoke-Command -Session $remotesession -ScriptBlock {
+        Get-Ciminstance -ClassName win32_operatingsystem | Select-Object @{Name="Operating System";Expression= {$_.Caption}},Version,InstallDate | 
+        ConvertTo-Html -Fragment -As List
+    }
+
+    # Create a table with the contents of the DCOM applications
+    $ReportData += "<H2>DCOM Applications on $computername</H2>"
+    $dcom = $DCOMApplications | Select-Object Name,Description,AppID
+    [xml]$html = $dcom | ConvertTo-Html -Fragment
+    for ($i=1;$i -le $html.table.tr.count-1;$i++) {
+        if ($html.table.tr[$i].td[3] -eq 0) {
+          $class = $html.CreateAttribute("class")
+          $class.value = 'alert'
+          $html.table.tr[$i].attributes.append($class) | out-null
+        }
+    }
+    # Add the table to the HTML document
+    $ReportData += $html.InnerXML
+
+    # Create a table with the contents of DCOM applications that have no LaunchPermissions set
+    $ReportData += "<H2>DCOM Applications with Default Permissions</H2>"
+    $DefaultPermissions = Get-Content .\$LaunchPermissionFile
+
+    $NamePattern = '[^(Win32_DCOMApplication:)](.*?)\('
+    $AppIDPattern = '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}'
+    Try {
+        $DefaultDCOM = $DefaultPermissions | ForEach-Object {
+            ($_ | Select-String -Pattern $NamePattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"}).Replace("(","")
+            ($_ | Select-String -Pattern $AppIDPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
+        }
+    } Catch [System.Management.Automation.RuntimeException] {
+        Write-Host "Caught Exception"
+    }
+
+    $ReportData += "<br><br><table><colgroup><col /><col /><col /></colgroup><tr><th>Name</th><th>AppID</th>" + $DefaultDCOM
+
+    # Footer containing the date of when the report was generated
+    $ReportData += "<p class='footer'>Date of reporting: $(get-date)</p>"
+
+    $convertParams = @{ 
+        head = @"
+            <Title>DCOMrade Report - $($computername)</Title>
+            <style>
+            body { background-color:#E5E4E2;
+                font-family:Monospace;
+                font-size:10pt; 
+            }
+            td, th { border:0px solid black; 
+                border-collapse:collapse;
+                white-space:pre; 
+            }
+            th { color:white;
+               background-color:black; 
+            }
+            table, tr, td, th { 
+                padding: 2px; margin: 0px ;white-space:pre; 
+            }
+            tr:nth-child(odd) {
+                background-color: lightgray
+            }
+            table { 
+                width:95%;margin-left:5px; margin-bottom:20px;
+            }
+            h2 {
+                font-family:Tahoma;
+                color:#6D7B8D;
+            }
+            .alert {
+                color: red; 
+            }
+            .footer { 
+                color:green; 
+                margin-left:10px; 
+                font-family:Tahoma;
+                font-size:8pt;
+                font-style:italic;
+            }
+            </style>
+"@
+        body = $ReportData
+    }
+    ConvertTo-Html @convertParams | Out-File .\"DCOMrade-Report.html"
+}
+
 if ($interactive) {
     Write-Host "[+] Attempting interactive session with $computername" -ForegroundColor Yellow
     $remotesession = Get-InteractiveSession
@@ -591,9 +688,12 @@ if ($interactive) {
 
 # Test for the RPC Firewall rule
 Get-RPCRule
+$DCOMApplications = Get-DCOMApplications
 # Get DCOM applications with default LaunchPermissions set
 $DCOMDefaultLaunchPermissions = Get-DefaultPermissions
 # Get the CLSIDs of the DCOM applications with default LaunchPermissions
 $DCOMApplicationsCLSID = Get-CLSID($DCOMDefaultLaunchPermissions)
 # Test the amount of members by instantiating these as DCOM
 Get-MemberTypeCount($DCOMApplicationsCLSID)
+
+HTMLReport
