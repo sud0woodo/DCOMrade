@@ -370,7 +370,7 @@ function Get-MemberTypeCount($CLSIDs) {
                     } 
                     # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
                     if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
-                        $CLSIDCount += "CLSID: $CLSID MemberType Count: " + $MemberCount
+                        $CLSIDCount += "CLSID: $CLSID MemberType Count: $MemberCount"
                         # Add the potentially vulnerable CLSIDs to the array
                         $VulnerableCLSID += $CLSID
                         
@@ -414,7 +414,7 @@ function Get-MemberTypeCount($CLSIDs) {
                     }
                     # Add the result to $CLSIDCount if it's more than 0 and not equal to the default amount of MemberTypes
                     if (-not ($MemberCount -eq $DefaultMemberCount) -and ($MemberCount -gt 0)) {
-                        $CLSIDCount += "CLSID: $CLSID MemberType Count: " + $MemberCount
+                        $CLSIDCount += "CLSID: $CLSID MemberType Count: $MemberCount" 
                         # Add the potentially vulnerable CLSIDs to the array
                         $VulnerableCLSID += $CLSID
                     }
@@ -430,12 +430,10 @@ function Get-MemberTypeCount($CLSIDs) {
 
     Create-ErrorLog($ErrorLog)
 
-    Write-Host "[+] The following COM objects might be interesting to look into: " -ForegroundColor Green
-    $CLSIDCount
-
     Try {
         Write-Host "[i] Writing CLSIDs without default MemberType count to $MemberTypeCountFile" -NoNewline -ForegroundColor Yellow
-        Out-File -FilePath .\$MemberTypeCountFile -InputObject $CLSIDCount -Encoding ascii -ErrorAction Stop
+        "[+] The following COM objects might be interesting to look into: " | Out-File -FilePath .\$MemberTypeCountFile -Encoding ascii -ErrorAction Stop
+        Out-File -FilePath .\$MemberTypeCountFile -InputObject $CLSIDCount -Append -Encoding ascii -ErrorAction Stop
         Write-Host "`r[i] Written CLSIDs without default MemberType count to $MemberTypeCountFile" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
@@ -445,6 +443,8 @@ function Get-MemberTypeCount($CLSIDs) {
 
     Write-Host "[i] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Yellow
     Get-VulnerableDCOM($VulnerableCLSID)
+
+    Return $CLSIDCount
 }
 
 # Function to provide the option to create a custom blacklist for future use on other machines in for example a Microsoft Windows domain
@@ -619,19 +619,24 @@ function HTMLReport {
 
     $NamePattern = '[^(Win32_DCOMApplication:)](.*?)\('
     $AppIDPattern = '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}'
-    Try {
-        $DefaultDCOM = $DefaultPermissions | ForEach-Object {
+
+    $DefaultDCOM = $DefaultPermissions | ForEach-Object {
+        Try {
             ($_ | Select-String -Pattern $NamePattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"}).Replace("(","")
             ($_ | Select-String -Pattern $AppIDPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
+        } Catch [System.InvalidOperationException], [System.Management.Automation.RuntimeException] {
+            Write-Host "Caught exception due to empty CLSID name value"
         }
-    } Catch [System.Management.Automation.RuntimeException] {
-        Write-Host "Caught Exception"
     }
 
     $ReportData += "<br><br><table><colgroup><col /><col /><col /></colgroup><tr><th>Name</th><th>AppID</th>" + $DefaultDCOM
 
+    $ReportData += "<H2>Interesting CLSIDs</H2>"
+    $ReportData += "<br><br><table><colgroup><col /><col /><col /></colgroup><tr><th>CLSID</th><th>MemberType Count</th>"
+    $MemberTypeCount
+
     # Footer containing the date of when the report was generated
-    $ReportData += "<p class='footer'>Date of reporting: $(get-date)</p>"
+    #$ReportData += "<p class='footer'>Date of reporting: $(get-date)</p>"
 
     $convertParams = @{ 
         head = @"
@@ -694,6 +699,6 @@ $DCOMDefaultLaunchPermissions = Get-DefaultPermissions
 # Get the CLSIDs of the DCOM applications with default LaunchPermissions
 $DCOMApplicationsCLSID = Get-CLSID($DCOMDefaultLaunchPermissions)
 # Test the amount of members by instantiating these as DCOM
-Get-MemberTypeCount($DCOMApplicationsCLSID)
+$MemberTypeCount = Get-MemberTypeCount($DCOMApplicationsCLSID)
 
 HTMLReport
