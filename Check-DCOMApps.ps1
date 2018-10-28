@@ -52,6 +52,9 @@ This is a good option when in a Windows domain where the machines have the same 
 https://github.com/sud0woodo
 
 .NOTES 
+DISCLAIMER: I am not a developer, this code is probably not as efficient as it could have been. 
+I am not responsible for the usage and outcomes of this tool, this tool was created for educational purposes.
+
 Access to the local/domain administrator account on the target machine is needed to enable PSRemoting and check/change the Firewall rules.
 To enable the features needed, execute the following commands:
 
@@ -61,7 +64,6 @@ Author: Axel Boesenach
 #>
 
 # Assign arguments to parameters
-
 param(
     [Parameter(Mandatory=$True,Position=1)]
     [String]$computername,
@@ -171,13 +173,13 @@ function Get-RPCRule {
 
     # Add the RPC Firewall rule if not yet present on the target system
     if ($CheckRPCRule -eq $True) {
-        Write-Host "[+] $computername allows external RPC connections!" -ForegroundColor Green
+        Write-Host "`r[+] $computername allows external RPC connections!" -ForegroundColor Green
     } else {
-        Write-Host "[!] External RPC Firewall rule not found!" -ForegroundColor Red
+        Write-Host "`r[!] External RPC Firewall rule not found!" -ForegroundColor Red
         Try {
-            Write-Host "[+] Attempting to add Firewall rule..." -ForegroundColor Yellow
+            Write-Host "`r[+] Attempting to add Firewall rule..." -ForegroundColor Yellow
             Invoke-Command -Session $remotesession -ScriptBlock {New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'}
-            Write-Host "[+] Firewall rule added!" -ForegroundColor Green
+            Write-Host "`r[+] Firewall rule added!`n" -ForegroundColor Green
         } Catch {
             Write-Host "[!] Failed to add RPC allow Firewall Rule!" -ForegroundColor Red
             Write-Host "[!] Exiting..." -ForegroundColor Red
@@ -190,7 +192,7 @@ function Get-RPCRule {
 function Get-DCOMApplications {
 
     # Get DCOM applications
-    Write-Host "[i] Retrieving DCOM applications." -ForegroundColor Yellow
+    Write-Host "`r[i] Retrieving DCOM applications." -ForegroundColor Yellow
     $DCOMApplications = Invoke-Command -Session $remotesession -ScriptBlock {
         Get-CimInstance Win32_DCOMapplication
     }
@@ -204,7 +206,7 @@ function Get-DCOMApplications {
         Break
     }
 
-    Write-Host "[+] DCOM applications retrieved and written to $DCOMApplicationsFile." -ForegroundColor Green
+    Write-Host "`r[+] DCOM applications retrieved and written to $DCOMApplicationsFile." -ForegroundColor Green
     Return $DCOMApplications  
 }
 
@@ -278,7 +280,7 @@ function Get-CLSID($DefaultLaunchPermission) {
         Write-Host "[!] Exiting..."
         Break
     }
-    Write-Host "[+] DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
+    Write-Host "`r[+] DCOM application CLSID's written to $CLSIDFile" -ForegroundColor Green
 
     # Extract the DCOM CLSIDs for future usage
     $ExtractedCLSIDs = $RemoteDCOMCLSIDs | Select-String -Pattern '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}' | ForEach-Object {
@@ -442,9 +444,9 @@ function Get-MemberTypeCount($CLSIDs) {
     }
 
     Write-Host "[i] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Yellow
-    Get-VulnerableDCOM($VulnerableCLSID)
+    #Get-VulnerableDCOM($VulnerableCLSID)
 
-    Return $CLSIDCount
+    Return $CLSIDCount, $VulnerableCLSID
 }
 
 # Function to provide the option to create a custom blacklist for future use on other machines in for example a Microsoft Windows domain
@@ -455,7 +457,7 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
     Try {
         Write-Host "[i] Writing $($BlacklistedCLSIDs.Count) CLSIDs to the custom blacklist" -NoNewline -ForegroundColor Yellow
         Out-File -FilePath .\$CustomBlackListFile -InputObject $BlackListedCLSIDs -Encoding ascii -ErrorAction Stop
-        Write-Host "`r[i] Written $($BlacklistedCLSIDs.Count) CLSIDs to $BlackListedCLSIDs" -ForegroundColor Yellow
+        Write-Host "`r[+] Written $($BlacklistedCLSIDs.Count) CLSIDs to $BlackListedCLSIDs" -ForegroundColor Green
     } Catch [System.IO.IOException] {
         Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
         Write-Host "[!] Exiting..."
@@ -577,12 +579,17 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
         Write-Host "[!] Exiting..."
         Break
     }
+
+    Return $VulnerableCLSID
 }
 
 # Function to generate the HTML report with the results
 function HTMLReport {
 
     $ReportData = @()
+
+    # Standard regex to extract CLSID/AppID
+    $CLSIDPattern = '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}'
 
     $ImagePath = ".\logo_hackdefense.png"
     $ImageBits =  [Convert]::ToBase64String((Get-Content $ImagePath -Encoding Byte))
@@ -599,13 +606,49 @@ function HTMLReport {
         ConvertTo-Html -Fragment -As List
     }
 
+    # Create a table for the DCOM objects that are likely to be vulnerable
+    $COMName = '[a-z]*\s[A-Z][a-zA-Z0-9]*\s\(.*\)|[a-z]*\s[A-Z][a-zA-Z0-9]*\(.*\)'
+    $COMPath = '(?i)\$COM\.\S*'
+    $VulnInfo = $VulnerableCLSID | ForEach-Object {
+        ($_ | Select-String -Pattern $CLSIDPattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"})
+        ($_ | Select-String -Pattern $COMName | ForEach-Object {"<td>$($_.Matches.Value)</td>"})
+        ($_ | Select-STring -Pattern $COMPath | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
+    }
+    $ReportData += "<H2>Possible Vulnerable DCOM</H2>"
+    $ReportData += "<br><table><colgroup><col /><col /><col /></colgroup><tr><th>CLSID</th><th>MemberType Name</th><th>Path</th>" + $VulnInfo + "</table>"
+
+    # Write the CLSIDs with MemberType counts that differ from the default
+    $CountPattern = '[0-9]{1,2}$'
+    $MembersCount = $MemberTypeCount | ForEach-Object {
+        ($_ | Select-String -Pattern $CLSIDPattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"})
+        ($_ | Select-STring -Pattern $CountPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
+    }
+    $ReportData += "<H2>Interesting CLSIDs</H2>"
+    $ReportData += "<br><table><colgroup><col /><col /><col /></colgroup><tr><th>CLSID</th><th>MemberType Count</th>" + $MembersCount + "</table>"
+
+    # Create a table with the contents of DCOM applications that have no LaunchPermissions set
+    $DefaultPermissions = Get-Content .\$LaunchPermissionFile
+    $NamePattern = '[^(Win32_DCOMApplication:)](.*?)\('
+    $DefaultDCOM = $DefaultPermissions | ForEach-Object {
+        Try {
+            ($_ | Select-String -Pattern $NamePattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"}).Replace("(","")
+            ($_ | Select-String -Pattern $CLSIDPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
+        } Catch {
+            # Non-terminating error
+        }
+    }
+    $ReportData += "<H2>DCOM Applications with Default Permissions</H2>"
+    $ReportData += "<br><table><colgroup><col /><col /><col /></colgroup><tr><th>Name</th><th>AppID</th>" + $DefaultDCOM + "</table>"
+
     # Create a table with the contents of the DCOM applications
     $ReportData += "<H2>DCOM Applications on $computername</H2>"
     $dcom = $DCOMApplications | Select-Object Name,Description,AppID
     [xml]$html = $dcom | ConvertTo-Html -Fragment
+    # Keep adding new rows and columns as long as there are entries in the list of DCOM applications
     for ($i=1;$i -le $html.table.tr.count-1;$i++) {
         if ($html.table.tr[$i].td[3] -eq 0) {
           $class = $html.CreateAttribute("class")
+          # Color the string red if no other entries are found
           $class.value = 'alert'
           $html.table.tr[$i].attributes.append($class) | out-null
         }
@@ -613,31 +656,10 @@ function HTMLReport {
     # Add the table to the HTML document
     $ReportData += $html.InnerXML
 
-    # Create a table with the contents of DCOM applications that have no LaunchPermissions set
-    $ReportData += "<H2>DCOM Applications with Default Permissions</H2>"
-    $DefaultPermissions = Get-Content .\$LaunchPermissionFile
-
-    $NamePattern = '[^(Win32_DCOMApplication:)](.*?)\('
-    $AppIDPattern = '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}'
-
-    $DefaultDCOM = $DefaultPermissions | ForEach-Object {
-        Try {
-            ($_ | Select-String -Pattern $NamePattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"}).Replace("(","")
-            ($_ | Select-String -Pattern $AppIDPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
-        } Catch [System.InvalidOperationException], [System.Management.Automation.RuntimeException] {
-            Write-Host "Caught exception due to empty CLSID name value"
-        }
-    }
-
-    $ReportData += "<br><br><table><colgroup><col /><col /><col /></colgroup><tr><th>Name</th><th>AppID</th>" + $DefaultDCOM
-
-    $ReportData += "<H2>Interesting CLSIDs</H2>"
-    $ReportData += "<br><br><table><colgroup><col /><col /><col /></colgroup><tr><th>CLSID</th><th>MemberType Count</th>"
-    $MemberTypeCount
-
     # Footer containing the date of when the report was generated
-    #$ReportData += "<p class='footer'>Date of reporting: $(get-date)</p>"
+    $ReportData += "<p class='footer'>Date of reporting: $(get-date)</p>"
 
+    # Create a style for the HTML page
     $convertParams = @{ 
         head = @"
             <Title>DCOMrade Report - $($computername)</Title>
@@ -698,7 +720,10 @@ $DCOMApplications = Get-DCOMApplications
 $DCOMDefaultLaunchPermissions = Get-DefaultPermissions
 # Get the CLSIDs of the DCOM applications with default LaunchPermissions
 $DCOMApplicationsCLSID = Get-CLSID($DCOMDefaultLaunchPermissions)
-# Test the amount of members by instantiating these as DCOM
-$MemberTypeCount = Get-MemberTypeCount($DCOMApplicationsCLSID)
+# Test the amount of members by instantiating these as DCOM, returns count and possible vulnerable DCOM objects
+
+$MemberTypeCount, $PossibleVulnerableCLSID = Get-MemberTypeCount($DCOMApplicationsCLSID)
+# Get the potentially vulnerable DCOM objects and their paths
+$VulnerableCLSID = Get-VulnerableDCOM($PossibleVulnerableCLSID)
 
 HTMLReport
