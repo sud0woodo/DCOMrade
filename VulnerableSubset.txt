@@ -8,3 +8,5 @@ ExecuteLine
 NewCurrentDatabase
 Service
 Create
+Run
+Exec
