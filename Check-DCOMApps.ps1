@@ -178,7 +178,9 @@ function Get-RPCRule {
         Write-Host "`r[!] External RPC Firewall rule not found!" -ForegroundColor Red
         Try {
             Write-Host "`r[+] Attempting to add Firewall rule..." -ForegroundColor Yellow
-            Invoke-Command -Session $remotesession -ScriptBlock {New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'}
+            Invoke-Command -Session $remotesession -ScriptBlock {
+                New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'
+            }
             Write-Host "`r[+] Firewall rule added!`n" -ForegroundColor Green
         } Catch {
             Write-Host "[!] Failed to add RPC allow Firewall Rule!" -ForegroundColor Red
@@ -366,7 +368,7 @@ function Get-MemberTypeCount($CLSIDs) {
                             # Release the instantiated COM object
                             [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
                             Return $MemberCount
-                        } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
+                        } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException], [System.InvalidOperationException] {
                             $ErrorLog += "[!] Caught Exception CLSID: $Using:CLSID"
                         }
                     } 
@@ -410,7 +412,7 @@ function Get-MemberTypeCount($CLSIDs) {
                         # Release the instantiated COM object
                         [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
                         Return $MemberCount
-                        } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException] {
+                        } Catch [System.Runtime.InteropServices.COMException], [System.Runtime.InteropServices.InvalidComObjectException], [System.UnauthorizedAccessException], [System.InvalidOperationException] {
                             $ErrorLog += "[!] Caught Exception CLSID: $Using:CLSID"
                         }
                     }
@@ -657,7 +659,7 @@ function HTMLReport {
     $ReportData += $html.InnerXML
 
     # Footer containing the date of when the report was generated
-    $ReportData += "<p class='footer'>Date of reporting: $(get-date)</p>"
+    $ReportData += "<p class='footer'>Date of reporting: $($CurrentDate)</p>"
 
     # Create a style for the HTML page
     $convertParams = @{ 
@@ -702,7 +704,7 @@ function HTMLReport {
 "@
         body = $ReportData
     }
-    ConvertTo-Html @convertParams | Out-File .\"DCOMrade-Report.html"
+    ConvertTo-Html @convertParams | Out-File .\"DCOMrade-Report-$computername.html"
 }
 
 if ($interactive) {
