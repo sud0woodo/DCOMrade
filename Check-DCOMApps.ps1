@@ -160,6 +160,8 @@ function Get-InteractiveSession {
     }
 }
 
+# This function is not needed per se but might give a good illustration as to how one can add remote firewall rules
+<#
 # Check if the RPC firewall rule is present, returns True if it accepts external connections, False if the rule is not present
 function Get-RPCRule {
 
@@ -189,6 +191,7 @@ function Get-RPCRule {
         }
     }
 }
+#>
 
 # Check the DCOM applications on the target system and write these to a textfile
 function Get-DCOMApplications {
@@ -715,8 +718,9 @@ if ($interactive) {
     $remotesession = Get-NonInteractiveSession
 }
 
-# Test for the RPC Firewall rule
-Get-RPCRule
+# Test for the RPC Firewall rule, comment out the section above to enable this
+#Get-RPCRule
+
 $DCOMApplications = Get-DCOMApplications
 # Get DCOM applications with default LaunchPermissions set
 $DCOMDefaultLaunchPermissions = Get-DefaultPermissions
