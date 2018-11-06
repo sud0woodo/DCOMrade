@@ -10,3 +10,7 @@ Service
 Create
 Run
 Exec
+Invoke
+File
+Method
+Explore
