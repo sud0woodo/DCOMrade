@@ -72,13 +72,16 @@ param(
     [String]$user,
 
     [Parameter(Mandatory=$True,Position=3)]
-    [ValidateSet("win7","win10")]
+    [ValidateSet("win7","win10","win2k12","win2k16")]
     [String]$os,
 
     [Parameter(Mandatory=$False,Position=4)]
-    [Boolean]$interactive,
+    [String]$domain,
 
     [Parameter(Mandatory=$False,Position=5)]
+    [Boolean]$interactive,
+
+    [Parameter(Mandatory=$False,Position=6)]
     [Boolean]$blacklist
     )
 
@@ -93,6 +96,8 @@ $CLSIDFile = "DCOM_CLSID_$computername.txt"
 # Create two blacklists: Windows 7 and Windows 10
 $Win7BlackListFile = "Win7BlacklistedCLSIDS.txt"
 $Win10BlackListFile = "Win10BlackListedCLSIDS.txt"
+$Win2k12BlackListFile = "Win2k12BlackListedCLSIDs.txt"
+$Win2k16BlackListFile = "Win2k16BlackListedCLSIDs.txt"
 $CustomBlackListFile = "Custom_Blaclisted_CLSIDs_$computername.txt"
 
 $VulnerableSubsetFile = "VulnerableSubset.txt"
@@ -129,17 +134,29 @@ if ($computername -notin $TrustedClients) {
 
 # Create a new non-interactive Remote Powershell Session
 function Get-NonInteractiveSession {
-
-    # Try connecting to the remote machine with the given computername and username
-    Try {
-        Write-Host "[i] Connecting to $computername" -ForegroundColor Yellow
-        $session = New-PSSession -ComputerName $computername -Credential $computername\$user -ErrorAction Stop
-        Write-Host "[+] Connected to $computername" -ForegroundColor Green
-        return $session
-    } Catch [System.Management.Automation.Remoting.PSRemotingTransportException] {
-        Write-Host "[!] Creation of Remote Session failed, Access is denied." -ForegroundColor Red
-        Write-Host "[!] Exiting..." -ForegroundColor Red
-        Break
+    # When connecting to a domain, the user should be prepended with the domain name
+    if ($domain) {
+        Try {
+            Write-Host "[i] Connecting to $computername" -ForegroundColor Yellow
+            $session = New-PSSession -ComputerName $computername -Credential $domain\$user -ErrorAction Stop
+            Write-Host "[+] Connected to $computername" -ForegroundColor Green
+            return $session
+        } Catch [System.Management.Automation.Remoting.PSRemotingTransportException] {
+            Write-Host "[!] Creation of Remote Session failed, Access is denied." -ForegroundColor Red
+            Write-Host "[!] Exiting..." -ForegroundColor Red
+            Break
+        } 
+    } else {
+        Try {
+            Write-Host "[i] Connecting to $computername" -ForegroundColor Yellow
+            $session = New-PSSession -ComputerName $computername -Credential $computername\$user -ErrorAction Stop
+            Write-Host "[+] Connected to $computername" -ForegroundColor Green
+            return $session
+        } Catch [System.Management.Automation.Remoting.PSRemotingTransportException] {
+            Write-Host "[!] Creation of Remote Session failed, Access is denied." -ForegroundColor Red
+            Write-Host "[!] Exiting..." -ForegroundColor Red
+            Break
+        }
     }
 }
 
@@ -298,28 +315,11 @@ function Get-CLSID($DefaultLaunchPermission) {
 
 # Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than the default amount of MemberTypes
 function Get-MemberTypeCount($CLSIDs) {
-    <#
-    TODO:
-        - Think of a way to not start unnecessary application windows and/or processes
-            + Maybe create a blacklist with known non-vulnerable/interesting DCOM CLSID's to skip?
-    
-            Example Blacklisted CLSIDs:
-            Name: Add to Windows Media Player list CLSID: {45597c98-80f6-4549-84ff-752cf55e2d29}
-            Name: Windows Media Player Burn Audio CD Handler CLSID: {cdc32574-7521-4124-90c3-8d5605a34933}
-            Name: Play with Windows Media Player CLSID: {ed1d0fdf-4414-470a-a56d-cfb68623fc58}
-            Name: MAPI Mail Previewer CLSID: {53BEDF0B-4E5B-4183-8DC9-B844344FA104}
-
-            There is a good chance that a lot of the installed applications on one of the machines in a Microsoft Windows domain have the same applications installed due to for example a WDWS (Windows Deployment Server).
-            Creating a base blacklist (See above blacklist) and giving the user the option to provide an additional blacklist might be a valuable option.
-        
-        - Create base blacklists based on Operating system version
-            + Windows 7
-            + Windows 8/8.1
-            + Windows 10
-    #>
 
     Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
 
+    # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
+    # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
     $DefaultMemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
         # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
         # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
@@ -338,7 +338,7 @@ function Get-MemberTypeCount($CLSIDs) {
     # Create an array to store errors as a log
     $ErrorLog = @()
 
-    # Read in the Blacklist depending on which OS was chosen
+    # Read in the Blacklist based on the OS that was given as a parameter
     switch($os) {
         "win7" {
             $DefaultBlackList = Get-Content -Path $Win7BlackListFile
@@ -346,6 +346,12 @@ function Get-MemberTypeCount($CLSIDs) {
         }
         "win10" {
             $DefaultBlackList = Get-Content -Path $Win10BlackListFile
+        }
+        "win2k12" {
+            $DefaultBlackList = Get-Content -Path $Win2k12BlackListFile
+        }
+        "win2k16" {
+            $DefaultBlackList = Get-Content -Path $Win2k16BlackListFile
         }
     }
     
