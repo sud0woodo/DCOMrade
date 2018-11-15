@@ -7,17 +7,7 @@ function Invoke-DCOMrade {
     This script is able to check if the external RPC allow Firewall rule is present (optional), enumerate the DCOM applications and check the Methods / Properties of the 
     DCOM applications for possible vulnerabilities. 
 
-    The first check is the RPC check which verifies whether or not RPC connections from external are allowed.
-    The RPC connection can be recognized in the Windows Firewall with the following query:
-    v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC
-
-    The Windows registry holds this value at the following location:
-    HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\FirewallPolicy\FirewallRules
-
-    If the rule is not present it is added with the following Powershell oneliner:
-    New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'
-
-    After adding the RPC firewall rule the script will enumerate the DCOM applications present on the machine and verify which CLSID belongs to which DCOM application.
+    The script will enumerate the DCOM applications present on the machine and verify which CLSID belongs to which DCOM application.
 
     The DCOM applications will get instantiated by the script and the amount of MemberTypes present will be checked, the DCOM applications might be interesting if it doesn't
     hold the same as the default amount of MemberTypes (this is checked by counting the amount of MemberTypes when instantiating the default CLSID of "Shortcut") and holds more
@@ -192,7 +182,7 @@ function Invoke-DCOMrade {
     function Get-DCOMApplications {
 
         # Get DCOM applications
-        Write-Host "`r[i] Retrieving DCOM applications." -ForegroundColor Yellow
+        Write-Verbose "`r[i] Retrieving DCOM applications." 
         $DCOMApplications = Get-CimInstance Win32_DCOMApplication
         
         Return $DCOMApplications  
@@ -205,7 +195,7 @@ function Invoke-DCOMrade {
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT | Out-Null
 
         # Loop through the registry and check every key for the LaunchPermission property, we're only interested in the keys without this property
-        Write-Host "[i] Checking DCOM applications with default launch permissions..." -ForegroundColor Yellow
+        Write-Verbose "[i] Checking DCOM applications with default launch permissions..." 
         $DefaultPermissionsAppID = Get-ChildItem -Path HKCR:\AppID\ | ForEach-Object {
             if(-Not($_.Property -Match "LaunchPermission")) {
                 $_.Name.Replace("HKEY_CLASSES_ROOT\AppID\","")
@@ -217,7 +207,7 @@ function Invoke-DCOMrade {
 
         # Check which DCOM applications have the default permissions set
         $DefaultPermissions = $DCOMApplications | Select-String -Pattern $DefaultPermissionsAppID
-        Write-Host "[+] Found $($DefaultPermissions.Count) DCOM applications without 'LaunchPermission' subkey!" -ForegroundColor Green
+        Write-Verbose "[+] Found $($DefaultPermissions.Count) DCOM applications without 'LaunchPermission' subkey!" 
 
         Return $DefaultPermissions
     }
@@ -236,7 +226,7 @@ function Invoke-DCOMrade {
         # Map the path to HKEY_CLASSES_ROOT
         New-PSDrive -Name HKCR -PSProvider Registry -Root HKEY_CLASSES_ROOT | Out-Null
 
-        Write-Host "[i] Retrieving CLSID's..." -ForegroundColor Yellow
+        Write-Verbose "[i] Retrieving CLSID's..." 
         # Loop through the registry and check which AppID with default LaunchPermissions corresponds with which CLSID  
         (Get-ChildItem -Path HKCR:\CLSID\ ).Name.Replace("HKEY_CLASSES_ROOT\CLSID\","") | ForEach-Object {
             if ($DCOMAppIDs -eq (Get-ItemProperty -Path HKCR:\CLSID\$_).'AppID') {
@@ -256,7 +246,7 @@ function Invoke-DCOMrade {
     # Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than the default amount of MemberTypes
     function Get-MemberTypeCount($CLSIDs) {
 
-        Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
+        Write-Verbose "[i] Checking MemberType count..." 
 
         # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
         # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
@@ -270,7 +260,7 @@ function Invoke-DCOMrade {
 
             Return $DefaultMemberCount
         }
-        Write-Host "[i] Default MemberType count is: $DefaultMemberCount" -ForegroundColor Yellow
+        Write-Verbose "[i] Default MemberType count is: $DefaultMemberCount" 
 
         # Create an array to store the potentially interesting DCOM applications
         $CLSIDCount = @()
@@ -300,7 +290,7 @@ function Invoke-DCOMrade {
             $CLSID = $_
             if (-not ($DefaultBlackList | ForEach-Object {$_ -Match $CLSID})) {
                 $MemberCount = Invoke-Command -ScriptBlock {
-                    Write-Host -NoNewline "`r[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
+                    Write-Verbose -NoNewline "`r[i] Checking CLSID: $CLSID" 
                     Try {
                         $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID("$CLSID","localhost"))
                         $MemberCount = ($COM | Get-Member).Count
@@ -317,7 +307,7 @@ function Invoke-DCOMrade {
             }
         }
 
-        Write-Host "`n[i] Trying potentially vulnerable CLSIDs with the vulnerable subset" -ForegroundColor Yellow
+        Write-Verbose "`n[i] Trying potentially vulnerable CLSIDs with the vulnerable subset" 
 
         Return $CLSIDCount, $VulnerableCLSID
     }
@@ -337,13 +327,13 @@ function Invoke-DCOMrade {
         # Create array to store potentially vulnerable CLSIDs
         $VulnerableCLSID = @()
 
-        Write-Host "[i] This might take a while...`n" -ForegroundColor Yellow
+        Write-Verbose "[i] This might take a while...`n" 
         # Loop over the interesting CLSIDs from the function Get-MemberTypeCount
         $VulnerableCLSIDs | ForEach-Object {
             # Add a slight delay between each loop
             Start-Sleep -Milliseconds 200
             $CLSID = $_ 
-            Write-Host -NoNewline "`r[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
+            Write-Verbose -NoNewline "`r[i] Checking CLSID: $CLSID" 
             $Vulnerable = Invoke-Command -ScriptBlock {
                 # Instantiate the CLSID
                 $COM = [activator]::CreateInstance([type]::GetTypeFromCLSID($CLSID, "localhost"))
@@ -402,8 +392,9 @@ function Invoke-DCOMrade {
                     }
                     Return $VulnCOM
                 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($COM) | Out-Null -ErrorAction Continue
-                } Catch [System.InvalidOperationException], [Microsoft.PowerShell.Commands.GetMemberCommand] {
-                    Write-Host "[i] Caught exception"
+                } Catch [System.InvalidOperationException], [
+                Microsoft.PowerShell.Commands.GetMemberCommand] {
+                    Write-Verbose "[i] Caught exception"
                 }
             }
             $VulnerableCLSID += $Vulnerable
@@ -413,13 +404,13 @@ function Invoke-DCOMrade {
 
         # Write the possible Vulnerable DCOM applications to file
         Try {
-            Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline -ForegroundColor Yellow
+            Write-Verbose "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline 
             "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n" | Out-File .\$PossibleVulnerableFile 
             Out-File -FilePath "C:\$PossibleVulnerableFile" -InputObject $VulnerableCLSID -Append -ErrorAction Stop
-            Write-Host "`r[i] Written possible vulnerable DCOM applications to: C:\$PossibleVulnerableFile" -ForegroundColor Yellow
+            Write-Verbose "`r[i] Written possible vulnerable DCOM applications to: C:\$PossibleVulnerableFile" 
         } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
+            Write-Verbose "[!] Failed to write output to file!"
+            Write-Verbose "[!] Exiting..."
             Break
         }
 
@@ -440,5 +431,3 @@ function Invoke-DCOMrade {
     # Get the potentially vulnerable DCOM objects and their paths
     $VulnerableCLSID = Get-VulnerableDCOM($PossibleVulnerableCLSID)
 }
-
-Invoke-DCOMrade
