@@ -1,18 +1,21 @@
 function Invoke-DCOMrade {
-    Write-Verbose "Starting script"
     <#
     .SYNOPSIS
-    Powershell script for checking possibly vulnerable DCOM applications.
+    Empire Powershell module for checking possibly vulnerable DCOM applications.
 
     .DESCRIPTION
-    This script is able to check if the external RPC allow Firewall rule is present (optional), enumerate the DCOM applications and check the Methods / Properties of the 
-    DCOM applications for possible vulnerabilities. 
+    This script is able to enumerate the DCOM applications and check the Methods / Properties of the DCOM applications 
+    for possible vulnerabilities. 
 
     The script will enumerate the DCOM applications present on the machine and verify which CLSID belongs to which DCOM application.
 
-    The DCOM applications will get instantiated by the script and the amount of MemberTypes present will be checked, the DCOM applications might be interesting if it doesn't
-    hold the same as the default amount of MemberTypes (this is checked by counting the amount of MemberTypes when instantiating the default CLSID of "Shortcut") and holds more
+    The DCOM applications will get instantiated by the script and the amount of MemberTypes present will be checked, 
+    the DCOM applications might be interesting if it doesn't hold the same as the default amount of MemberTypes 
+    (this is checked by counting the amount of MemberTypes when instantiating the default CLSID of "Shortcut") and holds more 
     MemberTypes than 0.
+    
+    The script outputs the interesting CLSID's to look into and their MemberType counts, as well as the list with possible
+    vulnerable DCOM applications.
 
     .PARAMETER ComputerName
     The ComputerName of the victim machine
