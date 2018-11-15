@@ -309,7 +309,7 @@ function Invoke-DCOMrade {
         }
 
         Write-Verbose "`n[i] Trying potentially vulnerable CLSIDs with the vulnerable subset" 
-        
+
         Return $CLSIDCount, $VulnerableCLSID
     }
 
@@ -347,7 +347,7 @@ function Invoke-DCOMrade {
                     $COM | Get-Member | ForEach-Object {
                         $MemberType = $_.Name
                         if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                            $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $_.Name
+                            $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $_.Name
                         }
                     }
                     # Loop over the members and their names (Depth 2)
@@ -359,7 +359,7 @@ function Invoke-DCOMrade {
                                 $MemberType = $_.Name
                                 # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                 if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                                    $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
+                                    $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
                                 }
                             }
                         }
@@ -371,7 +371,7 @@ function Invoke-DCOMrade {
                                     $MemberType = $_.Name
                                     # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                     if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                                        $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
+                                        $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
                                     }
                                 }
                             }
@@ -384,7 +384,7 @@ function Invoke-DCOMrade {
                                         $MemberType = $_.Name
                                         # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                         if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                                            $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $NameDepth1 + "." + $COMDepth3 + "." + $_.Name
+                                            $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $COMDepth3 + "." + $_.Name
                                         }
                                     }
                                 }
@@ -431,6 +431,7 @@ function Invoke-DCOMrade {
     $DCOMApplicationsCLSID = Get-CLSID($DCOMDefaultLaunchPermissions)
     # Test the amount of members by instantiating these as DCOM, returns count and possible vulnerable DCOM objects
     $MemberTypeCount, $PossibleVulnerableCLSID = Get-MemberTypeCount($DCOMApplicationsCLSID)
+    $MemberTypeCount
     # Get the potentially vulnerable DCOM objects and their paths
     $VulnerableCLSID = Get-VulnerableDCOM($PossibleVulnerableCLSID)
     $VulnerableCLSID
