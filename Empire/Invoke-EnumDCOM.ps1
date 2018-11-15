@@ -1,4 +1,5 @@
 function Invoke-DCOMrade {
+    Write-Verbose "Starting script"
     <#
     .SYNOPSIS
     Powershell script for checking possibly vulnerable DCOM applications.
@@ -308,7 +309,7 @@ function Invoke-DCOMrade {
         }
 
         Write-Verbose "`n[i] Trying potentially vulnerable CLSIDs with the vulnerable subset" 
-
+        
         Return $CLSIDCount, $VulnerableCLSID
     }
 
@@ -346,7 +347,7 @@ function Invoke-DCOMrade {
                     $COM | Get-Member | ForEach-Object {
                         $MemberType = $_.Name
                         if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                            $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $_.Name
+                            $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $_.Name
                         }
                     }
                     # Loop over the members and their names (Depth 2)
@@ -358,7 +359,7 @@ function Invoke-DCOMrade {
                                 $MemberType = $_.Name
                                 # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                 if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                                    $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
+                                    $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
                                 }
                             }
                         }
@@ -370,7 +371,7 @@ function Invoke-DCOMrade {
                                     $MemberType = $_.Name
                                     # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                     if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                                        $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
+                                        $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $NameDepth1 + "." + $_.Name
                                     }
                                 }
                             }
@@ -383,7 +384,7 @@ function Invoke-DCOMrade {
                                         $MemberType = $_.Name
                                         # Check if the membernames are present in the subset with strings that might indicate a vulnerability
                                         if ($VulnerableSubset | ForEach-Object {$_ -Match $MemberType}) {
-                                            $VulnCOM += "[+] Possible Vulnerability found: $_ CLSID: $CLSID Path: " + '$COM' + "." + $NameDepth1 + "." + $COMDepth3 + "." + $_.Name
+                                            $VulnCOM += "[+] Possible Vulnerability found: " + '$COM' + "." + $NameDepth1 + "." + $COMDepth3 + "." + $_.Name
                                         }
                                     }
                                 }
@@ -402,9 +403,10 @@ function Invoke-DCOMrade {
         # Store the potentially vulnerable MemberTypes and CLSIDs, remove duplicates
         #$OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
 
+        <#
         # Write the possible Vulnerable DCOM applications to file
         Try {
-            Write-Verbose "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline 
+            Write-Verbose "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile"
             "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n" | Out-File .\$PossibleVulnerableFile 
             Out-File -FilePath "C:\$PossibleVulnerableFile" -InputObject $VulnerableCLSID -Append -ErrorAction Stop
             Write-Verbose "`r[i] Written possible vulnerable DCOM applications to: C:\$PossibleVulnerableFile" 
@@ -413,6 +415,7 @@ function Invoke-DCOMrade {
             Write-Verbose "[!] Exiting..."
             Break
         }
+        #>
 
         Return $VulnerableCLSID
     }
@@ -430,4 +433,5 @@ function Invoke-DCOMrade {
     $MemberTypeCount, $PossibleVulnerableCLSID = Get-MemberTypeCount($DCOMApplicationsCLSID)
     # Get the potentially vulnerable DCOM objects and their paths
     $VulnerableCLSID = Get-VulnerableDCOM($PossibleVulnerableCLSID)
+    $VulnerableCLSID
 }
