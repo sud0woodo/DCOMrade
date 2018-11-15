@@ -32,22 +32,9 @@ function Invoke-DCOMrade {
     .PARAMETER os
     The operating system of the target machine
 
-    .PARAMETER interactive
-    Set this to $True if you want an interactive session with the machine
-
-    .PARAMETER Blacklist
-    Set this to $True if you want to create a custom Blacklist out of the CLSIDs that cannot be instantiated
-
     .EXAMPLE
     PS > Check-DCOMApps.ps1 -ComputerName victim -User alice -os win10
     Use this above command and parameters to start a non-interactive session when the target system is a Windows 10 machine
-
-    PS > Check-DCOMApps.ps1 -ComputerName victim -User alice -os win10 -interactive $True
-    Use this command and parameters to start a interactive session when the target system is a Windows 10 machine
-
-    PS > Check-DCOMApps.ps1 -ComputerName victim -User alive -os win10 -Blacklist $True
-    Use this command and parameters to start a non-interactive session that writes a custom BLSID based on CLSIDs that could not get instantiated
-    This is a good option when in a Windows Domain where the machines have the same software installed (avoids unnecessary hanging of the script)
 
     .LINK
     https://github.com/sud0woodo
@@ -75,24 +62,12 @@ function Invoke-DCOMrade {
 
         [Parameter(Mandatory=$True,Position=3)]
         [ValidateSet("win7","win10","win2k12","win2k16")]
-        [String]$OS,
-
-        [Parameter(Mandatory=$False,Position=4)]
-        [String]$Domain,
-
-        [Parameter(Mandatory=$False,Position=5)]
-        [Boolean]$Blacklist
+        [String]$OS
         )
 
     $ResultDir = (Get-Item -Path ".\").FullName + "\$ComputerName"
 
     $CurrentDate = Get-Date
-
-    # Define filenames to write to
-    $DCOMApplicationsFile = "DCOM_Applications_$ComputerName.txt"
-    $LaunchPermissionFile = "DCOM_DefaultLaunchPermissions_$ComputerName.txt"
-    $MemberTypeCountFile = "CLSID_MemberTypeCount_$ComputerName.txt"
-    $CLSIDFile = "DCOM_CLSID_$ComputerName.txt"
 
     # Create two blacklists: Windows 7 and Windows 10
     $Win7BlackList = @"
@@ -220,17 +195,6 @@ function Invoke-DCOMrade {
         Write-Host "`r[i] Retrieving DCOM applications." -ForegroundColor Yellow
         $DCOMApplications = Get-CimInstance Win32_DCOMApplication
         
-
-        # Write the results to a text file
-        Try {
-            Out-File -FilePath "$ResultDir\$DCOMApplicationsFile" -InputObject $DCOMApplications -Encoding ascii -ErrorAction Stop
-        } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
-            Break
-        }
-
-        Write-Host "`r[+] DCOM applications retrieved and written to $ResultDir\$DCOMApplicationsFile." -ForegroundColor Green
         Return $DCOMApplications  
     }
 
@@ -248,8 +212,6 @@ function Invoke-DCOMrade {
             }
         }
 
-
-
         # Store the DCOM applications present on the target machine in a variable
         $DCOMApplications = Get-DCOMApplications
 
@@ -257,16 +219,6 @@ function Invoke-DCOMrade {
         $DefaultPermissions = $DCOMApplications | Select-String -Pattern $DefaultPermissionsAppID
         Write-Host "[+] Found $($DefaultPermissions.Count) DCOM applications without 'LaunchPermission' subkey!" -ForegroundColor Green
 
-        # Write the results to the LaunchPermissionFile
-        Try {
-            Out-File -FilePath "$ResultDir\$LaunchPermissionFile" -InputObject $DefaultPermissions -Encoding ascii -ErrorAction Stop
-        } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
-            Break
-        }
-
-        Write-Host "[+] DCOM default LaunchPermission results written to $ResultDir\$LaunchPermissionFile" -ForegroundColor Green
         Return $DefaultPermissions
     }
 
@@ -291,16 +243,6 @@ function Invoke-DCOMrade {
                 $DCOMCLSIDs += "Name: " + (Get-ItemProperty -Path HKCR:\CLSID\$_).'(default)' + " CLSID: $_"
             } 
         }
-
-        # Write the output to a file
-        Try {
-            Out-File -FilePath "$ResultDir\$CLSIDFile" -InputObject $DCOMCLSIDs -Encoding ascii -ErrorAction Stop
-        } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
-            Break
-        }
-        Write-Host "`r[+] DCOM application CLSID's written to $ResultDir\$CLSIDFile" -ForegroundColor Green
 
         # Extract the DCOM CLSIDs for future usage
         $ExtractedCLSIDs = $DCOMCLSIDs | Select-String -Pattern '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}' | ForEach-Object {
@@ -374,56 +316,10 @@ function Invoke-DCOMrade {
                 }
             }
         }
-        #$VulnerableCLSID
-    
-        #Create-ErrorLog($ErrorLog)
 
-        Try {
-            Write-Host "[i] Writing CLSIDs without default MemberType count to $MemberTypeCountFile" -NoNewline -ForegroundColor Yellow
-            "[+] The following COM objects might be interesting to look into: " | Out-File -FilePath .\$MemberTypeCountFile -Encoding ascii -ErrorAction Stop
-            Out-File -FilePath "$ResultDir\$MemberTypeCountFile" -InputObject $CLSIDCount -Append -Encoding ascii -ErrorAction Stop
-            Write-Host "`r[i] Written CLSIDs without default MemberType count to $ResultDir\$MemberTypeCountFile" -ForegroundColor Yellow
-        } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
-            Break
-        }
-
-        Write-Host "[i] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Yellow
-        #Get-VulnerableDCOM($VulnerableCLSID)
+        Write-Host "`n[i] Trying potentially vulnerable CLSIDs with the vulnerable subset" -ForegroundColor Yellow
 
         Return $CLSIDCount, $VulnerableCLSID
-    }
-
-    # Function to provide the option to create a custom Blacklist for future use on other machines in for example a Microsoft Windows Domain
-    function Create-CustomBlackList($BlackListedCLSIDs) {
-
-        Write-Host "[i] Custom Blacklist parameter was given, building Blacklist..." -ForegroundColor Yellow
-
-        Try {
-            Write-Host "[i] Writing $($BlacklistedCLSIDs.Count) CLSIDs to the custom Blacklist" -NoNewline -ForegroundColor Yellow
-            Out-File -FilePath "$ResultDir\$CustomBlackListFile" -InputObject $BlackListedCLSIDs -Encoding ascii -ErrorAction Stop
-            Write-Host "`r[+] Written $($BlacklistedCLSIDs.Count) CLSIDs to $BlackListedCLSIDs" -ForegroundColor Green
-        } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
-            Break
-        }
-        Write-Host "[+] Blacklisted DCOM application CLSID's written to $ResultDir\$CLSIDFile" -ForegroundColor Green
-    }
-
-    # Function to write errors or blacklisted occurences to an errorlog
-    function Create-ErrorLog ($ErrorLog) {
-
-        Try {
-            Write-Host "`n[i] Writing $($ErrorLog.Count) errors to logfile" -NoNewline -ForegroundColor Yellow
-            Out-File -FilePath "$ResultDir\errorlog_$ComputerName.txt" -InputObject $ErrorLog -Encoding ascii -ErrorAction Stop
-            Write-Host "`r[i] Written $($ErrorLog.Count) errors to logfile" -ForegroundColor Yellow
-        } Catch [System.IO.IOException] {
-            Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-            Write-Host "[!] Exiting..."
-            Break
-        }
     }
 
     # Function that checks the possible vulnerable DCOM applications with the textfile of strings
@@ -519,8 +415,8 @@ function Invoke-DCOMrade {
         Try {
             Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline -ForegroundColor Yellow
             "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n" | Out-File .\$PossibleVulnerableFile 
-            Out-File -FilePath "$ResultDir\$PossibleVulnerableFile" -InputObject $VulnerableCLSID -Append -ErrorAction Stop
-            Write-Host "`r[i] Written possible vulnerable DCOM applications to: $ResultDir\$PossibleVulnerableFile" -ForegroundColor Yellow
+            Out-File -FilePath "C:\$PossibleVulnerableFile" -InputObject $VulnerableCLSID -Append -ErrorAction Stop
+            Write-Host "`r[i] Written possible vulnerable DCOM applications to: C:\$PossibleVulnerableFile" -ForegroundColor Yellow
         } Catch [System.IO.IOException] {
             Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
             Write-Host "[!] Exiting..."
@@ -528,129 +424,6 @@ function Invoke-DCOMrade {
         }
 
         Return $VulnerableCLSID
-    }
-
-    # Function to generate the HTML report with the results
-    function HTMLReport {
-
-        $ReportData = @()
-
-        # Standard regex to extract CLSID/AppID
-        $CLSIDPattern = '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}'
-        <#
-        $ImagePath = ".\logo_hackdefense.png"
-        $ImageBits =  [Convert]::ToBase64String((Get-Content $ImagePath -Encoding Byte))
-        $ImageFile = Get-Item $ImagePath
-        $ImageType = $ImageFile.Extension.Substring(1) #strip off the leading .
-        $ImageTag = "<Img src='data:image/$ImageType;base64,$($ImageBits)' Alt='$($ImageFile.Name)' style='float:left' width='120' height='120' hspace=10><br><br><br><br>"
-
-        $ReportData += $ImageTag
-        $ReportData += "<br><br>"
-        #>
-
-        $ReportData += "<H2>OS Info</H2>"
-
-        $ReportData += Get-Ciminstance -ClassName win32_operatingsystem | Select-Object @{
-            Name="Operating System";Expression= {$_.Caption}
-        },Version,InstallDate | ConvertTo-Html -Fragment -As List
-
-        # Create a table for the DCOM objects that are likely to be vulnerable
-        $COMName = '[a-z]*\s[A-Z][a-zA-Z0-9]*\s\(.*\)|[a-z]*\s[A-Z][a-zA-Z0-9]*\(.*\)'
-        $COMPath = '(?i)\$COM\.\S*'
-        $VulnInfo = $VulnerableCLSID | ForEach-Object {
-            ($_ | Select-String -Pattern $CLSIDPattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"})
-            ($_ | Select-String -Pattern $COMName | ForEach-Object {"<td>$($_.Matches.Value)</td>"})
-            ($_ | Select-STring -Pattern $COMPath | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
-        }
-        $ReportData += "<H2>Possible Vulnerable DCOM</H2>"
-        $ReportData += "<br><table><colgroup><col /><col /><col /></colgroup><tr><th>CLSID</th><th>MemberType Name</th><th>Path</th>" + $VulnInfo + "</table>"
-
-        # Write the CLSIDs with MemberType counts that differ from the default
-        $CountPattern = '[0-9]{1,2}$'
-        $MembersCount = $MemberTypeCount | ForEach-Object {
-            ($_ | Select-String -Pattern $CLSIDPattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"})
-            ($_ | Select-STring -Pattern $CountPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
-        }
-        $ReportData += "<H2>Interesting CLSIDs</H2>"
-        $ReportData += "<br><table><colgroup><col /><col /><col /></colgroup><tr><th>CLSID</th><th>MemberType Count</th>" + $MembersCount + "</table>"
-
-        # Create a table with the contents of DCOM applications that have no LaunchPermissions set
-        $DefaultPermissions = Get-Content "$ResultDir\$LaunchPermissionFile"
-        $NamePattern = '[^(Win32_DCOMApplication:)](.*?)\('
-        $DefaultDCOM = $DefaultPermissions | ForEach-Object {
-            Try {
-                ($_ | Select-String -Pattern $NamePattern | ForEach-Object {"<tr><td>$($_.Matches.Value)</td>"}).Replace("(","")
-                ($_ | Select-String -Pattern $CLSIDPattern | ForEach-Object {"<td>$($_.Matches.value)</td></tr>"})
-            } Catch {
-                # Non-terminating error
-            }
-        }
-        $ReportData += "<H2>DCOM Applications with Default Permissions</H2>"
-        $ReportData += "<br><table><colgroup><col /><col /><col /></colgroup><tr><th>Name</th><th>AppID</th>" + $DefaultDCOM + "</table>"
-
-        # Create a table with the contents of the DCOM applications
-        $ReportData += "<H2>DCOM Applications on $ComputerName</H2>"
-        $dcom = $DCOMApplications | Select-Object Name,Description,AppID
-        [xml]$html = $dcom | ConvertTo-Html -Fragment
-        # Keep adding new rows and columns as long as there are entries in the list of DCOM applications
-        for ($i=1;$i -le $html.table.tr.count-1;$i++) {
-            if ($html.table.tr[$i].td[3] -eq 0) {
-            $class = $html.CreateAttribute("class")
-            # Color the string red if no other entries are found
-            $class.value = 'alert'
-            $html.table.tr[$i].attributes.append($class) | out-null
-            }
-        }
-        # Add the table to the HTML document
-        $ReportData += $html.InnerXML
-
-        # Footer containing the date of when the report was generated
-        $ReportData += "<p class='footer'>Date of reporting: $($CurrentDate)</p>"
-
-        # Create a style for the HTML page
-        $convertParams = @{ 
-            head = @"
-                <Title>DCOMrade Report - $($ComputerName)</Title>
-                <style>
-                body { background-color:#E5E4E2;
-                    font-family:Monospace;
-                    font-size:10pt; 
-                }
-                td, th { border:0px solid black; 
-                    border-collapse:collapse;
-                    white-space:pre; 
-                }
-                th { color:white;
-                background-color:black; 
-                }
-                table, tr, td, th { 
-                    padding: 2px; margin: 0px ;white-space:pre; 
-                }
-                tr:nth-child(odd) {
-                    background-color: lightgray
-                }
-                table { 
-                    width:95%;margin-left:5px; margin-bottom:20px;
-                }
-                h2 {
-                    font-family:Tahoma;
-                    color:#6D7B8D;
-                }
-                .alert {
-                    color: red; 
-                }
-                .footer { 
-                    color:green; 
-                    margin-left:10px; 
-                    font-family:Tahoma;
-                    font-size:8pt;
-                    font-style:italic;
-                }
-                </style>
-"@
-            body = $ReportData
-        }
-        ConvertTo-Html @convertParams | Out-File "$ResultDir\DCOMrade-Report-$ComputerName.html"
     }
 
     if (!(Test-Path $ResultDir)) {
@@ -666,6 +439,6 @@ function Invoke-DCOMrade {
     $MemberTypeCount, $PossibleVulnerableCLSID = Get-MemberTypeCount($DCOMApplicationsCLSID)
     # Get the potentially vulnerable DCOM objects and their paths
     $VulnerableCLSID = Get-VulnerableDCOM($PossibleVulnerableCLSID)
-    # Generate the HTML report
-    HTMLReport
 }
+
+Invoke-DCOMrade
