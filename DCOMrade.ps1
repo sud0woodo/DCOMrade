@@ -17,11 +17,11 @@ The ComputerName of the victim machine
 .PARAMETER User
 The Username of the victim
 
-.PARAMETER os
+.PARAMETER OS
 The operating system of the target machine
 
-.PARAMETER interactive
-Set this to $True if you want an interactive session with the machine
+.PARAMETER Domain
+The name of the Microsoft Windows domain
 
 .PARAMETER Blacklist
 Set this to $True if you want to create a custom Blacklist out of the CLSIDs that cannot be instantiated
@@ -38,7 +38,7 @@ Use this command and parameters to start a non-interactive session that writes a
 This is a good option when in a Windows Domain where the machines have the same software installed (avoids unnecessary hanging of the script)
 
 .LINK
-https://github.com/sud0woodo
+https://github.com/sud0woodo/DCOMrade
 
 .NOTES 
 DISCLAIMER: I am not a developer, this code is probably not as efficient as it could have been. 
