@@ -405,7 +405,6 @@ function BlackList($BlackListedCLSIDs) {
 # Function that checks the possible vulnerable DCOM applications with the textfile of strings
 # NOTE: This checks with a max depth of 4
 function Get-VulnerableDCOM($VulnerableCLSIDs) {
-    
     <# 
     !!! NOTE !!!
     The following variable assignment is very bad practice, however I could not figure out how to suppress the errors thrown
