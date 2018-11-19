@@ -23,7 +23,7 @@ For a full technical explanation of the idea, the script and possible detection 
 The script, while not being used as an Empire module, has some limitations as the working of the script and how it connects with the target machine differs.
 
 * For this script to work, the Windows Remote Management services need to be allowed in the Windows Firewall (5985);
-* If the target system's network profile is set to `Public` the following command needs to be executed to allow Windows Remote Management services being used on the target system: `Enable-PSRemoting -SkipNetworkProfilecheck -Force`;
+* If the target system's network profile is set to `Public` the following command needs to be executed to allow Windows Remote Management services being used on the target system: `Enable-PSRemoting -SkipNetworkProfilecheck -Force`
 * This script only works when one has the credentials of a local Administrator on the target system. Without these credentials you will not be able to start a remote session with the target machine, or be able to activate DCOM applications.
 
 ## Example usage
@@ -36,6 +36,7 @@ When not in a Microsoft Windows domain:
 ```sh
 .\DCOMrade.ps1 -ComputerName [Computername / IP] -User [Local Administrator] -OS [Operating System]
 ```
+![](DCOMrade_example.gif)
 
 ## Limitations
 Currently the script does try to release any instantiated / activated DCOM applications but some activations start new processes (such as Internet Explorer), the process could be stopped but this would mean that if a user on the target system is using that particular application, this process will stop for them as well.
