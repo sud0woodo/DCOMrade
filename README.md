@@ -6,6 +6,9 @@ DCOMrade is a Powershell script that is able to enumerate the possible vulnerabl
 * Microsoft Windows Server 2012 / 2012 R2
 * Microsoft Windows Server 2016
 
+## Background
+I'm currently doing an internship at [HackDefense](https://hackdefense.com/), researching existing DCOM lateral movement techniques and trying to find a way to automate the enumeration of these (and possibly new techniques). The research resulted in the creation of this script and the accompanied research paper which is linked below.
+
 ## How it works
 The script was made based on the research done by Matt Nelson ([@enigma0x3](https://twitter.com/enigma0x3)), especially the [round 2](https://enigma0x3.net/2017/01/23/lateral-movement-via-dcom-round-2/) blogpost that goes into finding DCOM applications that might be useful for pentesters and red teams.
 
