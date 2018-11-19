@@ -3,24 +3,13 @@
 Powershell script for checking possibly vulnerable DCOM applications.
 
 .DESCRIPTION
-This script is able to check if the external RPC allow Firewall rule is present (optional), enumerate the DCOM applications and check the Methods / Properties of the 
-DCOM applications for possible vulnerabilities. 
+This script is able to enumerate the DCOM applications and check the Methods / Properties of the DCOM applications for possible vulnerabilities. 
 
-The first check is the RPC check which verifies whether or not RPC connections from external are allowed.
-The RPC connection can be recognized in the Windows Firewall with the following query:
-v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC
+The script will enumerate the DCOM applications present on the machine and verify which CLSID belongs to which DCOM application.
 
-The Windows registry holds this value at the following location:
-HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\FirewallPolicy\FirewallRules
-
-If the rule is not present it is added with the following Powershell oneliner:
-New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'
-
-After adding the RPC firewall rule the script will enumerate the DCOM applications present on the machine and verify which CLSID belongs to which DCOM application.
-
-The DCOM applications will get instantiated by the script and the amount of MemberTypes present will be checked, the DCOM applications might be interesting if it doesn't
-hold the same as the default amount of MemberTypes (this is checked by counting the amount of MemberTypes when instantiating the default CLSID of "Shortcut") and holds more
-MemberTypes than 0.
+The DCOM applications will get instantiated by the script and the amount of MemberTypes present will be checked, the DCOM applications might be interesting 
+if it doesn't hold the same as the default amount of MemberTypes (this is checked by counting the amount of MemberTypes when instantiating the default CLSID 
+of "Shortcut") and holds more MemberTypes than 0.
 
 .PARAMETER ComputerName
 The ComputerName of the victim machine
@@ -60,7 +49,7 @@ To enable the features needed, execute the following commands:
 
 PS > Enable-PSRemoting -SkipNetworkProfileCheck -Force
 
-Author: Axel Boesenach
+Author: Axel Boesenach / sud0woodo
 #>
 
 # Assign arguments to parameters
@@ -158,39 +147,6 @@ function Get-Session {
         }
     }
 }
-
-# This function is not needed per se but might give a good illustration as to how one can add remote firewall rules
-<#
-# Check if the RPC firewall rule is present, returns True if it accepts external connections, False if the rule is not present
-function Get-RPCRule {
-
-    # Check if the RPC Firewall rule is present and allows external connections
-    Write-Host "[i] Checking if $ComputerName allows External RPC connections..." -ForegroundColor Yellow
-    $CheckRPCRule = Invoke-Command -Session $remotesession {
-        Get-ItemProperty -Path Registry::HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules | ForEach-Object {
-            $_ -Match 'v2.10\|Action=Allow\|Active=TRUE\|Dir=In\|Protocol=6\|LPort=RPC'
-        }
-    }
-
-    # Add the RPC Firewall rule if not yet present on the target system
-    if ($CheckRPCRule -eq $True) {
-        Write-Host "`r[+] $ComputerName allows external RPC connections!" -ForegroundColor Green
-    } else {
-        Write-Host "`r[!] External RPC Firewall rule not found!" -ForegroundColor Red
-        Try {
-            Write-Host "`r[+] Attempting to add Firewall rule..." -ForegroundColor Yellow
-            Invoke-Command -Session $remotesession -ScriptBlock {
-                New-ItemProperty -Path HKLM:\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules -Name RPCtest -PropertyType String -Value 'v2.10|Action=Allow|Active=TRUE|Dir=In|Protocol=6|LPort=RPC|App=any|Svc=*|Name=Allow RPC IN|Desc=custom RPC allow|'
-            }
-            Write-Host "`r[+] Firewall rule added!`n" -ForegroundColor Green
-        } Catch {
-            Write-Host "[!] Failed to add RPC allow Firewall Rule!" -ForegroundColor Red
-            Write-Host "[!] Exiting..." -ForegroundColor Red
-            Break
-        }
-    }
-}
-#>
 
 # Check the DCOM applications on the target system and write these to a textfile
 function Get-DCOMApplications {
@@ -298,8 +254,6 @@ function Get-CLSID($DefaultLaunchPermission) {
 # Function to loop over the DCOM CLSIDs and check which CLSIDs hold more than the default amount of MemberTypes
 function Get-MemberTypeCount($CLSIDs) {
 
-    Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
-
     # Check the default number of MemberType on the system, CLSID that is being used as a reference is the built in "Shortcut" CLSID
     # CLSID located at HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}
     $DefaultMemberCount = Invoke-Command -Session $remotesession -ScriptBlock {
@@ -317,8 +271,6 @@ function Get-MemberTypeCount($CLSIDs) {
     $CLSIDCount = @()
     # Create an array to store the potentially vulnerable DCOM applications
     $VulnerableCLSID = @()
-    # Create an array to store errors as a log
-    $ErrorLog = @()
 
     # Read in the Blacklist based on the OS that was given as a parameter
     switch($OS) {
@@ -384,7 +336,7 @@ function Get-MemberTypeCount($CLSIDs) {
         }
         
         # Call the function to write the blacklisted CLSIDs to
-        Create-CustomBlackList($CustomBlackList)
+        BlackList($CustomBlackList)
     
     } else {
         $CLSIDs | ForEach-Object {
@@ -423,8 +375,6 @@ function Get-MemberTypeCount($CLSIDs) {
         }
     }
 
-    Create-ErrorLog($ErrorLog)
-
     Try {
         Write-Host "[i] Writing CLSIDs without default MemberType count to $MemberTypeCountFile" -NoNewline -ForegroundColor Yellow
         "[+] The following COM objects might be interesting to look into: " | Out-File -FilePath .\$MemberTypeCountFile -Encoding ascii -ErrorAction Stop
@@ -436,14 +386,11 @@ function Get-MemberTypeCount($CLSIDs) {
         Break
     }
 
-    Write-Host "[i] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Yellow
-    #Get-VulnerableDCOM($VulnerableCLSID)
-
     Return $CLSIDCount, $VulnerableCLSID
 }
 
 # Function to provide the option to create a custom Blacklist for future use on other machines in for example a Microsoft Windows Domain
-function Create-CustomBlackList($BlackListedCLSIDs) {
+function BlackList($BlackListedCLSIDs) {
 
     Write-Host "[i] Custom Blacklist parameter was given, building Blacklist..." -ForegroundColor Yellow
 
@@ -459,23 +406,10 @@ function Create-CustomBlackList($BlackListedCLSIDs) {
     Write-Host "[+] Blacklisted DCOM application CLSID's written to $ResultDir\$CLSIDFile" -ForegroundColor Green
 }
 
-# Function to write errors or blacklisted occurences to an errorlog
-function Create-ErrorLog ($ErrorLog) {
-
-    Try {
-        Write-Host "`n[i] Writing $($ErrorLog.Count) errors to logfile" -NoNewline -ForegroundColor Yellow
-        Out-File -FilePath "$ResultDir\errorlog_$ComputerName.txt" -InputObject $ErrorLog -Encoding ascii -ErrorAction Stop
-        Write-Host "`r[i] Written $($ErrorLog.Count) errors to logfile" -ForegroundColor Yellow
-    } Catch [System.IO.IOException] {
-        Write-Host "[!] Failed to write output to file!" -ForegroundColor Red
-        Write-Host "[!] Exiting..."
-        Break
-    }
-}
-
 # Function that checks the possible vulnerable DCOM applications with the textfile of strings
 # NOTE: This checks with a max depth of 4
 function Get-VulnerableDCOM($VulnerableCLSIDs) {
+    
     <# 
     !!! NOTE !!!
     The following variable assignment is very bad practice, however I could not figure out how to suppress the errors thrown
@@ -558,8 +492,6 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
         }
         $VulnerableCLSID += $Vulnerable
     }
-    # Store the potentially vulnerable MemberTypes and CLSIDs, remove duplicates
-    #$OutputVulnerableCLSID = $VulnerableCLSID | Sort-Object -Unique
 
     # Write the possible Vulnerable DCOM applications to file
     Try {
@@ -584,13 +516,17 @@ function HTMLReport {
     # Standard regex to extract CLSID/AppID
     $CLSIDPattern = '\{(?i)[0-9a-z]{8}-([0-9a-z]{4}-){3}[0-9a-z]{12}\}'
 
-    $ImagePath = ".\logo_hackdefense.png"
+    # You can add a company logo here if you would like to have one in the HTML report
+    <#
+    $ImagePath = "[location of the logo]"
     $ImageBits =  [Convert]::ToBase64String((Get-Content $ImagePath -Encoding Byte))
     $ImageFile = Get-Item $ImagePath
     $ImageType = $ImageFile.Extension.Substring(1) #strip off the leading .
     $ImageTag = "<Img src='data:image/$ImageType;base64,$($ImageBits)' Alt='$($ImageFile.Name)' style='float:left' width='120' height='120' hspace=10><br><br><br><br>"
 
     $ReportData += $ImageTag
+    #>
+
     $ReportData += "<br><br>"
     $ReportData += "<H2>OS Info</H2>"
 
@@ -704,17 +640,27 @@ if (!(Test-Path $ResultDir)) {
 
 # Start the remote session
 $remotesession = Get-Session
+
 # OPTIONAL and just to showcase really
 # Test for the RPC Firewall rule, comment out the section above to enable this
 #Get-RPCRule
+
+# Get a list of all the DCOM applications on the target system
 $DCOMApplications = Get-DCOMApplications
+
 # Get DCOM applications with default LaunchPermissions set
 $DCOMDefaultLaunchPermissions = Get-DefaultPermissions
+
 # Get the CLSIDs of the DCOM applications with default LaunchPermissions
 $DCOMApplicationsCLSID = Get-CLSID($DCOMDefaultLaunchPermissions)
+
 # Test the amount of members by instantiating these as DCOM, returns count and possible vulnerable DCOM objects
+Write-Host "[i] Checking MemberType count..." -ForegroundColor Yellow
 $MemberTypeCount, $PossibleVulnerableCLSID = Get-MemberTypeCount($DCOMApplicationsCLSID)
+
 # Get the potentially vulnerable DCOM objects and their paths
+Write-Host "[i] Trying potentially vulnerable CLSIDs with $VulnerableSubsetFile" -ForegroundColor Yellow
 $VulnerableCLSID = Get-VulnerableDCOM($PossibleVulnerableCLSID)
+
 # Generate the HTML report
 HTMLReport
