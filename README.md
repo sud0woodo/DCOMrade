@@ -27,9 +27,10 @@ The script, while not being used as an Empire module, has some limitations as th
 
 ## Example usage
 When in a Microsoft Windows domain:
+
 `.\DCOMrade.ps1 -ComputerName [Computername / IP] -User [Local Administrator] -OS [Operating System] -Domain [Domain name]`
 
 ## Limitations
-Currently the script does try to release any instantiated / activated DCOM applications but some activations start new processes (such as Internet Explorer). The processes could be stopped but this would mean that if a user on the target system is using that particular application, this process will stop for them as well.
+Currently the script does try to release any instantiated / activated DCOM applications but some activations start new processes (such as Internet Explorer), the process could be stopped but this would mean that if a user on the target system is using that particular application, this process will stop for them as well.
 
 Another thing, which probably has to do with bad my coding skills, is that the script might introduce considerable load on the target system if the target system does not have a lot of resources. Be considerate when using this in a production environment or on servers.
