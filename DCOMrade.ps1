@@ -295,8 +295,6 @@ function Get-MemberTypeCount($CLSIDs) {
         $CustomBlackList = @()
         # Loop over the list with CLSIDs to be tested
         $CLSIDs | ForEach-Object {
-            # Add a little bit of delay to reduce the load
-            Start-Sleep -Milliseconds 300
             Try {
                 $CLSID = $_
                 # Check if the CLSID is on the Blacklist
@@ -340,8 +338,6 @@ function Get-MemberTypeCount($CLSIDs) {
     
     } else {
         $CLSIDs | ForEach-Object {
-            # Add a little bit of delay to reduce the load
-            Start-Sleep -Milliseconds 200
             Try {
                 $CLSID = $_
                 # Check if the CLSID is on the Blacklist
@@ -377,7 +373,7 @@ function Get-MemberTypeCount($CLSIDs) {
 
     Try {
         Write-Host "[i] Writing CLSIDs without default MemberType count to $MemberTypeCountFile" -NoNewline -ForegroundColor Yellow
-        "[+] The following COM objects might be interesting to look into: " | Out-File -FilePath .\$MemberTypeCountFile -Encoding ascii -ErrorAction Stop
+        "[+] The following COM objects might be interesting to look into: `n" | Out-File -FilePath "$ResultDir\$MemberTypeCountFile" -Encoding ascii -ErrorAction Stop
         Out-File -FilePath "$ResultDir\$MemberTypeCountFile" -InputObject $CLSIDCount -Append -Encoding ascii -ErrorAction Stop
         Write-Host "`r[i] Written CLSIDs without default MemberType count to $ResultDir\$MemberTypeCountFile" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
@@ -428,8 +424,6 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     Write-Host "[i] This might take a while...`n" -ForegroundColor Yellow
     # Loop over the interesting CLSIDs from the function Get-MemberTypeCount
     $VulnerableCLSIDs | ForEach-Object {
-        # Add a slight delay between each loop
-        Start-Sleep -Milliseconds 200
         $CLSID = $_ 
         Write-Host -NoNewline "`r[i] Checking CLSID: $CLSID" -ForegroundColor Yellow
         $Vulnerable = Invoke-Command -Session $remotesession -ScriptBlock {
@@ -496,7 +490,7 @@ function Get-VulnerableDCOM($VulnerableCLSIDs) {
     # Write the possible Vulnerable DCOM applications to file
     Try {
         Write-Host "`n[i] Writing possible vulnerable DCOM applications to: $PossibleVulnerableFile" -NoNewline -ForegroundColor Yellow
-        "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n" | Out-File .\$PossibleVulnerableFile 
+        "Instantiated with the following command: " + '$COM' + ' = [activator]::CreateInstance([type]::GetTypeFromCLSID("{CLSID}", "localhost"))' + "`n`n" | Out-File  "$ResultDir\$PossibleVulnerableFile"
         Out-File -FilePath "$ResultDir\$PossibleVulnerableFile" -InputObject $VulnerableCLSID -Append -ErrorAction Stop
         Write-Host "`r[i] Written possible vulnerable DCOM applications to: $ResultDir\$PossibleVulnerableFile" -ForegroundColor Yellow
     } Catch [System.IO.IOException] {
