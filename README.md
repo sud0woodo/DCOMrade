@@ -7,7 +7,7 @@ DCOMrade is a Powershell script that is able to enumerate the possible vulnerabl
 * Microsoft Windows Server 2016
 
 ## How it works
-The script was made based on the research done by [@enigma0x3](https://twitter.com/enigma0x3), especially the [round 2](https://enigma0x3.net/2017/01/23/lateral-movement-via-dcom-round-2/) blogpost that goes into finding DCOM applications that might be useful for pentesters and red teams.
+The script was made based on the research done by Matt Nelson ([@enigma0x3](https://twitter.com/enigma0x3)), especially the [round 2](https://enigma0x3.net/2017/01/23/lateral-movement-via-dcom-round-2/) blogpost that goes into finding DCOM applications that might be useful for pentesters and red teams.
 
 First a remote connection with the target system is made, this connection is used throughout the script for a multitude of operations. A Powershell command is executed on the target system that retrieves all the DCOM applications and their AppID's. The AppID's are used to loop through the Windows Registry and check for any AppID that does not have the `LaunchPermission` subkey set in their entry, these AppID's are stored and used to retrieve their associated CLSID's.
 
@@ -44,5 +44,12 @@ When not in a Microsoft Windows domain:
 * Currently the script does try to release any instantiated / activated DCOM applications but some activations start new processes (such as Internet Explorer), the process could be stopped but this would mean that if a user on the target system is using that particular application, this process will stop for them as well;
 * Another thing, which probably has to do with bad my coding skills, is that the script might introduce considerable load on the target system if the target system does not have a lot of resources. Be considerate when using this in a production environment or on servers;
 * The script might take some time to execute completely, this depends on the amount of DCOM applications and the size of the vulnerable subset file.
+
+## Acknowledgements
+This script was inspired by a DCOM lateral movement workshop that was given by Eva Tanaskoska, without this workshop the whole idea for trying to enumerate this with automation would never be conceived.
+
+Thanks to Matt Nelson's (a.k.a. [@enigma0x3](https://twitter.com/enigma0x3)) research I was able to find enough information to come up with a form of automation.
+
+Philip Tsukerman's [article](https://www.cybereason.com/blog/dcom-lateral-movement-techniques) which sums up most of the available DCOM techniques for lateral movement and going into how these work.
 
 
