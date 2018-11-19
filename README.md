@@ -20,6 +20,16 @@ The results of the script are outputted in a HTML report and should be usable fo
 For a full technical explanation of the idea, the script and possible detection methods you can read the research paper associated with this. #TODO: ADD LINK TO PAPER
 
 ## Prerequisites
-The script while not being used as an Empire module has some limitations as the working of the script and how it connects with the target machine differs.
+The script, while not being used as an Empire module, has some limitations as the working of the script and how it connects with the target machine differs.
 
-* This script only works when one has the credentials of a local Administrator on the target system. Without these credentials you will not be able to start a remote session with the target machine.
+* For this script to work, the Windows Remote Management services need to be allowed in the Windows Firewall (5985);
+* This script only works when one has the credentials of a local Administrator on the target system. Without these credentials you will not be able to start a remote session with the target machine, or be able to activate DCOM applications.
+
+## Example usage
+When in a Microsoft Windows domain:
+`.\DCOMrade.ps1 -ComputerName [Computername / IP] -User [Local Administrator] -OS [Operating System] -Domain [Domain name]`
+
+## Limitations
+Currently the script does try to release any instantiated / activated DCOM applications but some activations start new processes (such as Internet Explorer). The processes could be stopped but this would mean that if a user on the target system is using that particular application, this process will stop for them as well.
+
+Another thing, which probably has to do with bad my coding skills, is that the script might introduce considerable load on the target system if the target system does not have a lot of resources. Be considerate when using this in a production environment or on servers.
