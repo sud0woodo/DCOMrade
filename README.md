@@ -18,3 +18,8 @@ The CLSID's in the array are being checked on strings in the `MemberTypes` that 
 The results of the script are outputted in a HTML report and should be usable for auditing a system as a preventive measure. For the offensive side I created an Empire module which at the time of writing is awaiting approval to be added to the master branch. If you would like to add this to Empire yourself you can do so by adding the module located [here](https://github.com/sud0woodo/DCOMrade/tree/master/Empire).
 
 For a full technical explanation of the idea, the script and possible detection methods you can read the research paper associated with this. #TODO: ADD LINK TO PAPER
+
+## Prerequisites
+The script while not being used as an Empire module has some limitations as the working of the script and how it connects with the target machine differs.
+
+* This script only works when one has the credentials of a local Administrator on the target system. Without these credentials you will not be able to start a remote session with the target machine.
