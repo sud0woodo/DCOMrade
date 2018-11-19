@@ -13,7 +13,7 @@ First a remote connection with the target system is made, this connection is use
 
 The script uses a specific blacklist with each OS, this is why there are different options for the target operating system. The blacklist skips CLSID entries that might hang the script because of DCOM applications that cannot be activated, this reduces the load on the target system and reduces the time for the script to complete.
 
-With the CLSID the DCOM application associated with it can be activated, the script does this with the CLSID of the 'Shortcut' (`HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}`) because this is a shared CLSID across the Microsoft Windows operating systems. The 'Shortcut' CLSID is used to count the amount of `MemberTypes` associated with it, this is done to check what the default amount of `MemberType` is and check for the CLSID's that hold anything different than this amount. The CLSID's with a different amount of `MemberTypes` might hold a `Method` or `Property` that can be (ab)used, and will be added to an array.
+With the CLSID, the DCOM application associated with it can be activated. The 'Shortcut' CLSID is used to count the amount of `MemberTypes` associated with it, this is done to check the default amount of `MemberTypes`. This number is used to check for the CLSID's that hold anything different than this amount. The script does this with the CLSID of the 'Shortcut' (`HKEY_CLASSES_ROOT\CLSID\{00021401-0000-0000-C000-000000000046}`) because this is a shared CLSID across the Microsoft Windows operating systems. The CLSID's with a different amount of `MemberTypes` might hold a `Method` or `Property` that can be (ab)used, and will be added to an array.
 
 The CLSID's in the array are being checked on strings in the `MemberTypes` that might indicate a way to (ab)use it, this list of strings can be found in the [VulnerableSubset](https://github.com/sud0woodo/DCOMrade/blob/master/VulnerableSubset.txt) file. Please note that this list is by no means a complete list to find every single vulnerable DCOM application, but this list being a dynamic part of the process should give the user of the script a way to look for specific strings that migth indicate a functionality of a DCOM application that might be useful for their purpose.
 
@@ -51,5 +51,3 @@ This script was inspired by a DCOM lateral movement workshop that was given by E
 Thanks to Matt Nelson's (a.k.a. [@enigma0x3](https://twitter.com/enigma0x3)) research I was able to find enough information to come up with a form of automation.
 
 Philip Tsukerman's [article](https://www.cybereason.com/blog/dcom-lateral-movement-techniques) which sums up most of the available DCOM techniques for lateral movement and going into how these work.
-
-
