@@ -46,7 +46,7 @@ When not in a Microsoft Windows domain:
 * The script might take some time to execute completely, this depends on the amount of DCOM applications and the size of the vulnerable subset file.
 
 ## Acknowledgements
-This script was inspired by a DCOM lateral movement workshop that was given by Eva Tanaskoska, without this workshop the whole idea for trying to enumerate this with automation would never be conceived.
+This script was inspired by a DCOM lateral movement workshop that was given by Eva Tanaskoska, without this workshop the whole idea for trying to enumerate this in an automated manner would never be conceived.
 
 Thanks to Matt Nelson's (a.k.a. [@enigma0x3](https://twitter.com/enigma0x3)) research I was able to find enough information to come up with a form of automation.
 
